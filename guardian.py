@@ -1184,7 +1184,8 @@ def guard_refusals():
         if not ready:
             continue
         iss, h = ready[-1].group(1), ready[-1].group(2)
-        approved = any(f"GUARDIAN APPROVE PLAN {iss} sha256:{h}" in c["body"] for c in cs)
+        # Only a comment that STARTS with the approval counts: Codex's PLAN READY quotes the expected approval line.
+        approved = any(c["body"].lstrip().startswith(f"GUARDIAN APPROVE PLAN {iss} sha256:{h}") for c in cs)
         if approved or queued.get(iss) == h:
             continue
         queued[iss] = h

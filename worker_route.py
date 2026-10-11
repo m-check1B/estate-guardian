@@ -29,8 +29,13 @@ LANES = {  # candidates in preference order, across vendors; OUT/NEVER labs are 
     "judgement": {"candidates": ["opus", "luna", "grok"], "desc": "Complex open-ended work needing judgement: architecture, design, specs, security review, audit, root cause, incident, migration, multi-repo change."},
     "marketing": {"candidates": ["opus"], "desc": "Marketing, pricing, brand, positioning or copy (Founder rule: Opus only)."},
 }
-LABS_FILE = os.path.expanduser(os.environ.get("ESTATE_LABS", "~/Developer-artifacts/guardian/labs.json"))
-ROUTING_LOG = os.path.expanduser("~/Developer-artifacts/guardian/worker-routing.jsonl")
+ART = os.path.expanduser("~/Developer-artifacts/guardian")
+# the live policy (the guard flips switches in it); a fresh checkout falls back to the shipped example
+LABS_FILE = os.environ.get("ESTATE_LABS") or next(
+    (p for p in (f"{ART}/labs.json",) if os.path.exists(p)), os.path.join(HERE, "labs.example.json"))
+ROUTING_LOG = os.environ.get("ESTATE_ROUTING_LOG", f"{ART}/worker-routing.jsonl")
+READINESS = os.environ.get("ESTATE_READINESS", f"{ART}/lab-readiness.json")
+USAGE = os.environ.get("ESTATE_USAGE", f"{ART}/lab-usage.json")
 RULES = [  # (lane, regex) checked on name + title + text; filename hints weigh double
     ("vault", r"vault[-_ ]brief|nasvault|credential|api[ -]?key|token rotat|rotate .*token|password|keychain|notary|secret"),
     ("clicker", r"ui prove|click|browser|playwright|e2e|screenshot|user ?test|usertest|desktop[- ]app check|recon|scout|walk ?through|computer use"),
@@ -65,6 +70,8 @@ def rules(name, title, text):
 
 
 def jev_lane(text):
+    if os.environ.get("ROUTER_NO_JEV"):  # offline / tests: rules + default only
+        return None, 0.0
     try:
         import classify  # reuses the Keychain key handling (Founder-authorized), UA and retries
         import urllib.request
@@ -132,9 +139,6 @@ def route(path, title=""):
             "confidence": round(conf, 2), "host": host, "fallback_from": fell_from, "reason": LANES[lane]["desc"], "scores": score}
 
 
-READINESS = os.path.expanduser("~/Developer-artifacts/guardian/lab-readiness.json")
-
-
 def lab_state(host):
     """Policy (labs.json: switch ON/OFF/NEVER, until, fallback) x readiness (tentacles doctor per host, cached by the guard)."""
     import datetime as _dt
@@ -162,7 +166,7 @@ def lab_state(host):
 def vendor_usage():
     """Plan usage % per vendor from the guard's CodexBar snapshot (guardian/lab-usage.json)."""
     try:
-        snap = json.load(open(os.path.expanduser("~/Developer-artifacts/guardian/lab-usage.json")))
+        snap = json.load(open(USAGE))
     except Exception:
         return {}
     m = {"claude": "anthropic", "codex": "openai", "cursor": "cursor", "grok": "xai"}

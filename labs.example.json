@@ -1,0 +1,107 @@
+{
+ "_doc": "Example lab policy for worker_route.py. Copy to ~/Developer-artifacts/guardian/labs.json (or point ESTATE_LABS at it). switch: ON | OFF | NEVER. OFF needs a reason: founder (manual; optional 'until' YYYY-MM-DD = auto-ON after that date) or usage (set by the guard from plan usage; 'until' = the ISO reset time, auto-ON after it). NEVER labs are never chosen. fallback = the exact chain tried in order when the lab is not usable; the vault lane never falls back. 'hire' is the label your hire script takes; instance/model are the Tentacles/T3 instance and model.",
+ "labs": {
+  "opus": {
+   "vendor": "anthropic",
+   "hire": "claude",
+   "instance": "claudeAgent",
+   "model": "claude-opus-5-5",
+   "switch": "ON",
+   "fallback": [
+    "sonnet",
+    "luna"
+   ]
+  },
+  "sonnet": {
+   "vendor": "anthropic",
+   "hire": "sonnet",
+   "instance": "claudeAgent",
+   "model": "claude-sonnet-5-5",
+   "switch": "ON",
+   "fallback": [
+    "luna-medium",
+    "cursor"
+   ]
+  },
+  "haiku": {
+   "vendor": "anthropic",
+   "hire": "haiku",
+   "instance": "claudeAgent",
+   "model": "claude-haiku-5-5",
+   "switch": "ON",
+   "fallback": [
+    "cursor",
+    "luna-medium"
+   ]
+  },
+  "luna": {
+   "vendor": "openai",
+   "hire": "luna",
+   "instance": "codex",
+   "model": "gpt-6-luna",
+   "switch": "ON",
+   "fallback": [
+    "cursor",
+    "sonnet"
+   ]
+  },
+  "luna-medium": {
+   "vendor": "openai",
+   "hire": "codex",
+   "instance": "codex",
+   "model": "gpt-6-luna",
+   "switch": "ON",
+   "fallback": [
+    "cursor",
+    "sonnet"
+   ]
+  },
+  "cursor": {
+   "vendor": "cursor",
+   "hire": "cursor",
+   "instance": "cursor",
+   "model": "composer-2.5",
+   "switch": "ON",
+   "fallback": [
+    "luna-medium",
+    "sonnet"
+   ]
+  },
+  "grok": {
+   "vendor": "xai",
+   "hire": "grok",
+   "instance": "grok",
+   "model": "grok-4.7",
+   "switch": "ON",
+   "fallback": [
+    "sonnet",
+    "luna-medium"
+   ]
+  },
+  "sol": {
+   "vendor": "openai",
+   "hire": "sol",
+   "instance": "codex",
+   "model": "gpt-6.1-sol",
+   "switch": "OFF",
+   "fallback": [
+    "luna"
+   ],
+   "reason": "founder"
+  },
+  "astra": {
+   "vendor": "openai",
+   "hire": null,
+   "instance": "codex",
+   "model": "gpt-6-astra",
+   "switch": "NEVER"
+  },
+  "fable": {
+   "vendor": "anthropic",
+   "hire": null,
+   "instance": "claudeAgent",
+   "model": "claude-fable-5-1",
+   "switch": "NEVER"
+  }
+ }
+}

@@ -150,3 +150,6 @@ The Founder asked for this on 11 Oct 2026: "we need multilab not anthropic only"
 - **Fallbacks:** every lab in `labs.json` names its fallback chain. The decision records `fallback_from` when one is used.
 - **Spreading:** everyday work goes to the least-loaded vendor, counting today's hires plus plan usage. The primary keeps a small edge.
 - **Logging:** every decision goes to `guardian/worker-routing.jsonl`, and the autoresearch loop measures outcomes per lab.
+- **Config:** the live policy is `~/Developer-artifacts/guardian/labs.json` (or `ESTATE_LABS`). A fresh checkout falls back to the shipped `labs.example.json`. Readiness, usage and the routing log are optional; without them the router trusts the switches. `ROUTER_NO_JEV=1` runs on rules only (offline).
+- **Use:** `python3 worker_route.py BRIEF-fix-lint.md "title"` prints `{lab, model_lab, vendor, budget, lane, how, confidence, host, fallback_from}` or `{blocked: true, reason}` when no lab in the chain is usable. `hire-auto.sh` passes `lab` and `budget` to the hire script.
+- **Tests:** `python3 -m unittest test_worker_route` runs 13 offline cases: lanes, usage OFF → fallback, auto-ON after the reset, founder OFF with and without a date, NEVER labs, the vault lane never falling back, not-ready instances, and the cross-vendor spread.
