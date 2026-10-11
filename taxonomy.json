@@ -257,7 +257,7 @@
    "card": {
     "root_cause_question": "Did a transient fault get encoded as a terminal state?",
     "smallest_safe_fix": "Restore access; never encode transient faults as revoked.",
-    "guard": "Sphere pool saturation probe; revocation counter (pending)",
+    "guard": "Sphere pool saturation probe; revocation counter",
     "owner": "senior",
     "playbook": "01"
    }

@@ -24,6 +24,7 @@ import urllib.request
 
 # Cloudflare refuses Python's default 'Python-urllib/3.x' UA (403, error 1010; 11 Oct). Every request sets one.
 UA = "estate-guardian/1"
+GH = "/opt/homebrew/bin/gh" if os.path.exists("/opt/homebrew/bin/gh") else "gh"
 HOME = os.path.expanduser("~")
 ART = f"{HOME}/Developer-artifacts"
 STATE_DIR = f"{ART}/guardian"
@@ -229,7 +230,7 @@ def guard_handoffs():
             prod_fix = bool(re.search(r"hotfix|\bP0\b|production|prod fix|revert|rollback", pr.get("title", ""), re.I))
             out.append(F(f"approved-open-{repo}-{num}", owner, f"B3-approved {repo}#{num} still open (owner: {owner})",
                          f"B3 approved exact head {sha[:8]}; the PR is open with that head. The {owner} line merges it "
-                         f"(only the repo's owner merges) or says why not. 10 Oct: an approved cut waited 7 h.",
+                         f"(only the repo's owner merges; an internal ticket) or says why not. 10 Oct: an approved cut waited 7 h.",
                          grace=30, p0=prod_fix, nudge=owner == "senior"))
     for path in sorted(os.listdir(ART)):
         if path.startswith("RESULT-RELEASE-") and path.endswith(".md"):
@@ -564,8 +565,8 @@ def guard_lines():
             v = 0
         age = (NOW - v) / 60
         if age > limit:
-            # A line without a durable watchdog task flaps: one heartbeat refresh closed the issue, the next stall
-            # filed a new one. Hold its issue open 24 h after recovery until the watchdog task exists.
+            # A line without a durable watchdog task flaps: one heartbeat refresh closed an internal ticket, the next stall
+            # filed an internal ticket. Hold its issue open 24 h after recovery until the watchdog task exists.
             task = "jack" if owner == "senior" else owner
             durable = os.path.exists(os.path.expanduser(f"~/.claude/scheduled-tasks/{task}-pulse-watchdog/SKILL.md"))
             out.append(F(f"heartbeat-{name}", owner, f"{name} is {int(age)} min old (limit {limit})",
@@ -728,7 +729,7 @@ def guard_prod():
     rc, txt, _ = ssh(PRODUCTION, f"stat -c %a {CFG['production']['edge_config_dir']}", t=20)
     if txt.strip() and txt.strip() != "700":
         out.append(F("traefik-dynamic-mode", "senior", f"Production traefik-dynamic is mode {txt.strip()} (must be 700)",
-                     "Holds TLS and routing config. 11 Oct the CN deploy re-moded it to 755.", grace=0))
+                     "holds TLS and routing config. 11 Oct the CN deploy re-moded it to 755.", grace=0))
     rc, _, _ = sh(["nc", "-z", "-G", "5", PRODUCTION.split("@")[1], "22"], t=15)
     if rc != 0:
         out.append(F("prod-ssh", "senior", "Production SSH (Tailscale :22) refused",
@@ -807,7 +808,7 @@ def disk_pct(host):
     cmd = {"nas": (NAS, "df -P /volume1 | tail -1"), "production": (PRODUCTION, "df -P / | tail -1"),
            "jupiter": (JUPITER, "df -P / | tail -1")}[host]
     # Used/size in blocks, not the rounded Use% column: on a 1.8 TB disk one integer tick is 18 GB,
-    # and a single tick inside the trend window projected "95% in 8.9 days" (a false positive).
+    # and a single tick inside the trend window projected "95% in 8.9 days".
     m = re.search(r"\s(\d+)\s+(\d+)\s+(\d+)\s+(\d+)%", ssh(*cmd, t=25)[1])
     return round(100 * int(m.group(2)) / int(m.group(1)), 2) if m and int(m.group(1)) else None
 
@@ -937,7 +938,7 @@ def guard_predict():
         rows.append(("senior-heartbeat-early", "Senior", f"{age:.0f} min", st))
     except Exception:
         pass
-    # 8. backups (status.json)
+    # 8. backups
     rc, txt, _ = ssh(JUPITER, "cat ~/.local/state/backup-status/status.json", t=25)
     try:
         d = json.loads(txt)
@@ -950,13 +951,13 @@ def guard_predict():
             elif age_h >= r.get("warn_h", 20) or r.get("last_result") not in ("OK", None):
                 bad.append(("AMBER", w, age_h, r.get("last_result")))
         st = "RED" if any(b[0] == "RED" for b in bad) else ("AMBER" if bad else "GREEN")
-        rows.append(("backup-age", "backup workloads", "; ".join(f"{w} {('%.0fh' % a) if a else 'never'} {lr}" for _, w, a, lr in bad) or "all within limits", st))
+        rows.append(("backup-age", "an internal ticket workloads", "; ".join(f"{w} {('%.0fh' % a) if a else 'never'} {lr}" for _, w, a, lr in bad) or "all within limits", st))
         if bad:
             out.append(F("backup-age", "guardian", f"Backups: {sum(b[0] == 'RED' for b in bad)} failing, {sum(b[0] == 'AMBER' for b in bad)} late",
                          "\n".join(f"- {s_} {w}: age {('%.1fh' % a) if a else 'never OK'}, last {lr}" for s_, w, a, lr in bad),
                          grace=30, amber=st == "AMBER"))
     except Exception:
-        rows.append(("backup-age", "backup workloads", "status.json unreadable", "AMBER"))
+        rows.append(("backup-age", "an internal ticket", "status.json unreadable", "AMBER"))
     # 9. provider early warning
     try:
         errs = [r for r in seat_rows() if r[3] == "error" and (iso_age_min(r[6]) or 0) < 180 and not expected_out(r[5])]
@@ -1214,8 +1215,42 @@ def guard_refusals():
     return out
 
 
+def mirror_leaks():
+    """Private Forgejo repos whose push mirror targets a PUBLIC GitHub repo (owner/name pairs)."""
+    leaks, page = [], 1
+    while True:
+        repos = fj(f"/user/repos?limit=50&page={page}")
+        for r in repos:
+            if not r.get("private"):
+                continue
+            for m in fj(f"/repos/{r['full_name']}/push_mirrors"):
+                addr = m.get("remote_address", "")
+                if "github.com" not in addr:
+                    continue
+                gh_repo = re.sub(r"\.git$", "", addr.split("github.com", 1)[1].lstrip(":/"))
+                rc, vis, _ = sh([GH, "api", f"repos/{gh_repo}", "--jq", ".private"], t=20)
+                if rc == 0 and vis.strip() == "false":
+                    leaks.append((r["full_name"], gh_repo))
+        if len(repos) < 50:
+            return leaks
+        page += 1
+
+
+def guard_mirrors():
+    """11 Oct publication of estate-guardian: the private repo and its public edition share a GitHub name family.
+    A private Forgejo repo must never push-mirror into a public GitHub repo (that publishes internal code)."""
+    try:
+        leaks = cached("mirror_leaks", 3600, mirror_leaks)
+    except Exception as e:
+        return [F("mirror-check", "guardian", "mirror visibility check failed", str(e)[:200], grace=120, amber=True)]
+    return [F(f"mirror-leak-{src.replace('/', '-')}", "guardian", f"private {src} mirrors to PUBLIC GitHub {dst}",
+              f"Forgejo {src} is private but its push mirror targets public github.com/{dst}. Delete that push mirror "
+              f"now (fj DELETE /repos/{src}/push_mirrors/<name>), then check what reached GitHub.", grace=0, p0=True)
+            for src, dst in leaks]
+
+
 GUARDS = {"ci": guard_ci, "handoffs": guard_handoffs, "lines": guard_lines, "hosts": guard_hosts, "prod": guard_prod,
-          "predict": guard_predict, "vault": guard_vault_web, "refusals": guard_refusals}
+          "predict": guard_predict, "vault": guard_vault_web, "refusals": guard_refusals, "mirrors": guard_mirrors}
 
 
 # ---------------------------------------------------------------- Linear + state

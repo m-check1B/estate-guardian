@@ -15,7 +15,6 @@ License: MIT.
 
 ---
 
-
 GUARDIAN is the estate reliability line (Founder, 11 Oct 2026). This repo holds its **no-AI guards**: scripts that watch every line and host and file Linear issues, so night-time failures are caught by a machine, not by the Founder.
 
 Owner: GUARDIAN (Opus integrator). Reviews: B3. Forgejo only, AGit PRs.
@@ -31,6 +30,7 @@ Owner: GUARDIAN (Opus integrator). Reviews: B3. Forgejo only, AGit PRs.
 | `lines` | each line's pulse heartbeat; Senior cron loss (pulse-watch wakes); errored and stuck seats on the Pro, dev-workers and the iOS mini; provider outages (one error signature across ≥3 seats); T3 alive | Senior crons dead every night 5–11 Oct; Grok 402 took out 19 seats (11 Oct) |
 | `hosts` | Jupiter MemAvailable / load / disk / kernel OOM kills / guest state; dev-workers RAM; NAS, production, Pro and mini disks; CI guest reboots | three Jupiter OOMs 9–10 Oct; NAS at 89 % |
 | `prod` | public health of Jack, Bezpečnost práce, CouncilNow, shop, Sphere; Sphere DB pool saturation; production SSH | Sphere lock convoy (10 Oct); fail2ban lock-out (10 Oct) |
+| `mirrors` | hourly: every private Forgejo repo's GitHub push mirror must target a private GitHub repo (P0 otherwise) | publishing the private estate-guardian when its public edition went to GitHub (11 Oct) |
 
 ## How it reports
 
@@ -61,7 +61,7 @@ Every incident GUARDIAN root-causes ends here or in a product repo (playbook 18:
 
 ## Maintenance windows
 
-Before a planned deploy or restart, the owning line (or GUARDIAN on its behalf) adds an entry to `~/Developer-artifacts/guardian/maintenance.json`, e.g. `{"prod-down-councilnow": {"until": <epoch>, "why": "deploy v3.0.3"}}`. The key is a finding-key prefix. Muted findings stay visible in `GUARDIAN-STATUS.md` but file nothing and wake nobody. When the window expires, alarms resume.
+Before a planned deploy or restart, the owning line (or GUARDIAN on its behalf) adds an entry to `~/Developer-artifacts/guardian/maintenance.json`, e.g. `{"prod-down-councilnow": {"until": <epoch>, "why": "deploy cn-3.0.3"}}`. The key is a finding-key prefix. Muted findings stay visible in `GUARDIAN-STATUS.md` but file nothing and wake nobody. When the window expires, alarms resume.
 
 ## Senior watch (Founder, 11 Oct 2026)
 
