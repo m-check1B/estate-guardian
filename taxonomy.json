@@ -1,0 +1,351 @@
+{
+ "_doc": "GUARDIAN failure taxonomy: one class per failure mechanism, each with its solution card (pain -> solution). Rules are tier 1 (free, deterministic); Jev reads free text the rules miss. Add a class only when the eval set shows a real miss; prefer merging classes (subtract before you add).",
+ "classes": {
+  "ci-runner-dead": {
+   "desc": "A CI runner registration, daemon, runner container or its network bridge is down, so jobs for its labels cannot start.",
+   "key_prefixes": [
+    "runner-offline-",
+    "runner-daemon-",
+    "runner-ctr-",
+    "bridge-",
+    "guest-down-ci-",
+    "ci-probe-"
+   ],
+   "patterns": [
+    "runner (is )?(offline|down|dead)",
+    "docker0",
+    "no route to host",
+    "forgejo-runner",
+    "runner container"
+   ],
+   "card": {
+    "root_cause_question": "Why did the runner die: a daemon restart, a deleted bridge, an IP change or OOM? Read the daemon journal before restarting anything.",
+    "smallest_safe_fix": "Restart the runner through its normal unit or container after the cause is known (playbook 08 step 3). Never kill active jobs.",
+    "guard": "estate-guardian ci guard: runner registrations, daemons, containers and bridges every 5 min",
+    "owner": "guardian",
+    "playbook": "08, 16, 10-lessons 10 Oct (docker0)"
+   }
+  },
+  "ci-capacity": {
+   "desc": "CI work cannot progress: runs wait for a runner or label, jobs hang, orphan job containers pile up, or the host is overloaded.",
+   "key_prefixes": [
+    "ci-starved-",
+    "ci-stuck-",
+    "orphan-jobs-",
+    "jupiter-load",
+    "risk-label-coverage"
+   ],
+   "patterns": [
+    "waiting (for|on) (a )?runner",
+    "queued",
+    "20-min max",
+    "hung after",
+    "orphan",
+    "load (average )?\\d{2,}",
+    "starved"
+   ],
+   "card": {
+    "root_cause_question": "Is any online runner serving this job's runs-on label, and is the host inside its CI budget?",
+    "smallest_safe_fix": "Point the workflow at a served label (jack-ci-x64) or restore the runner; drain overflow when the host is over budget (playbook 16).",
+    "guard": "ci-starved/ci-stuck guard + risk matrix label-coverage check",
+    "owner": "guardian",
+    "playbook": "16 Jupiter CI capacity"
+   }
+  },
+  "ci-disk-slow": {
+   "desc": "Storage latency (fsync) inside CI makes database-heavy tests time out.",
+   "key_prefixes": [
+    "fsync-slow-"
+   ],
+   "patterns": [
+    "fsync",
+    "sqlite ddl",
+    "disk cache",
+    "nobarrier",
+    "io pressure"
+   ],
+   "card": {
+    "root_cause_question": "Is it the guest mount options, host I/O contention or the storage pool?",
+    "smallest_safe_fix": "nobarrier/commit=30 on the CI guest, or test DBs on tmpfs; find the competing writer on the host.",
+    "guard": "fsync probe in every CI guest (limit 8 ms)",
+    "owner": "guardian",
+    "playbook": "10-lessons 11 Oct"
+   }
+  },
+  "host-memory": {
+   "desc": "A host or guest runs out of memory: low MemAvailable, OOM kills, swapped seats.",
+   "key_prefixes": [
+    "jupiter-ram",
+    "jupiter-oom",
+    "devworkers-ram"
+   ],
+   "patterns": [
+    "oom",
+    "out of memory",
+    "memavailable",
+    "killed process",
+    "swap (is )?full",
+    "memory pressure"
+   ],
+   "card": {
+    "root_cause_question": "Which guest or process grew, and was it a seat running suites on the host?",
+    "smallest_safe_fix": "Stop seat-run suites and drain CI overflow (playbook 16); never kill active CI jobs.",
+    "guard": "hosts guard (10 GiB floor, OOM kills) + mem-guard on Jupiter",
+    "owner": "guardian",
+    "playbook": "16"
+   }
+  },
+  "disk-full": {
+   "desc": "A disk is at or near its limit (production, NAS, Jupiter, Pro, mini).",
+   "key_prefixes": [
+    "nas-disk",
+    "prod-disk",
+    "jupiter-disk",
+    "pro-disk",
+    "mini-disk",
+    "risk-disk-"
+   ],
+   "patterns": [
+    "enospc",
+    "no space left",
+    "disk (is )?(full|at \\d+%)",
+    "\\d+% used"
+   ],
+   "card": {
+    "root_cause_question": "What grew, by how much per day, and is it regenerable?",
+    "smallest_safe_fix": "Prune regenerable caches only; archive data to the NAS before pruning (playbook 08/16).",
+    "guard": "disk thresholds + risk matrix days-to-full projection",
+    "owner": "guardian",
+    "playbook": "08, 16"
+   }
+  },
+  "network-address": {
+   "desc": "A service points at a dead address or name (the NAS .20 interface, MagicDNS, stale DNS), or a port is refused.",
+   "key_prefixes": [
+    "forgejo-api",
+    "jupiter-unreachable",
+    "prod-ssh",
+    "risk-ip-pin"
+   ],
+   "patterns": [
+    "root_url",
+    "could not resolve",
+    "connection refused",
+    "unreachable",
+    "fail2ban",
+    "dnat",
+    "dead (lan )?(ip|interface)|old address"
+   ],
+   "card": {
+    "root_cause_question": "Which config still holds the old address, and why didn't the address change reach it?",
+    "smallest_safe_fix": "Move the reference to the live IP (IP-first rule) and verify end to end.",
+    "guard": "risk matrix IP-pin scan",
+    "owner": "guardian",
+    "playbook": "IP-first rule"
+   }
+  },
+  "provider-outage": {
+   "desc": "A model provider refuses or fails for many seats: billing (402), entitlement (400 not supported), auth, rate limits.",
+   "key_prefixes": [
+    "provider-"
+   ],
+   "patterns": [
+    "402",
+    "payment required",
+    "usage balance",
+    "not supported when using codex",
+    "could not authenticate",
+    "rate limit",
+    "quota",
+    "entitlement"
+   ],
+   "card": {
+    "root_cause_question": "Billing, entitlement or auth? Is it one seat or the whole lab?",
+    "smallest_safe_fix": "Mark the lab OUT in GUARDIAN.md §6, broadcast, re-hire on an ON lab; credential/billing steps go to a #refusal.",
+    "guard": "provider guard (3+ seats, one signature) + daily probes",
+    "owner": "guardian",
+    "playbook": "GUARDIAN.md §6"
+   }
+  },
+  "pulse-blind": {
+   "desc": "An orchestrating line stops watching: stale heartbeat, dead crons, errored or stuck seats, T3 down.",
+   "key_prefixes": [
+    "heartbeat-",
+    "senior-crons-dead",
+    "seats-errored",
+    "seats-stuck",
+    "t3-down-",
+    "tool-target-"
+   ],
+   "patterns": [
+    "heartbeat",
+    "crons? (dead|did not fire|expired)",
+    "pulse-wake",
+    "seat (errored|stuck)",
+    "stalled"
+   ],
+   "card": {
+    "root_cause_question": "Did the session die, did its crons expire, or is it blocked in a long foreground call?",
+    "smallest_safe_fix": "Wake the line (SendMessage / Pulse Runner); re-create its crons; restart errored seats with their brief.",
+    "guard": "lines guard + scheduled watchdogs",
+    "owner": "senior",
+    "playbook": "12"
+   }
+  },
+  "handoff-stalled": {
+   "desc": "Work waits on a person or line: approved PRs unmerged, WAIT_SENIOR, unread notes or messages.",
+   "key_prefixes": [
+    "approved-open-",
+    "captain-wait-",
+    "senior-note-",
+    "senior-inbox",
+    "notes-to-senior"
+   ],
+   "patterns": [
+    "approve[d]? .* (still )?open",
+    "wait_senior",
+    "→ ?senior",
+    "unanswered",
+    "unread"
+   ],
+   "card": {
+    "root_cause_question": "Was the signal not surfaced, or surfaced and not acted on?",
+    "smallest_safe_fix": "Wake the owner; merge or answer; if the signal was invisible, fix the surface (pulse/guard).",
+    "guard": "handoffs guard with two-stage Senior escalation",
+    "owner": "senior",
+    "playbook": "12, 10-lessons 10 Oct (#920)"
+   }
+  },
+  "prod-down": {
+   "desc": "A production product fails its public health check.",
+   "key_prefixes": [
+    "prod-down-",
+    "risk-pm2-dump",
+    "prod-orphan-"
+   ],
+   "patterns": [
+    "5\\d\\d\\b",
+    "bad gateway",
+    "health(/ready)? (fail|down)",
+    "pm2 .*0 apps",
+    "unhealthy"
+   ],
+   "card": {
+    "root_cause_question": "Is it the app, its worker, the host (disk/memory) or the edge?",
+    "smallest_safe_fix": "Playbook 08: confirm, read-only cause, smallest reversible restore, post-fault sweep of the whole host.",
+    "guard": "prod guard + production synthetic monitor",
+    "owner": "senior",
+    "playbook": "08"
+   }
+  },
+  "auth-state": {
+   "desc": "Identity, pairing or licensing state goes wrong: revoked by a transient fault, lock convoys, expired pairs, sign-in failures.",
+   "key_prefixes": [
+    "sphere-pool",
+    "sphere-restart-unreviewed-"
+   ],
+   "patterns": [
+    "revoked",
+    "pair(ing|er)",
+    "lock convoy",
+    "for update",
+    "sign-?in",
+    "zitadel",
+    "licen[cs]e",
+    "token expired"
+   ],
+   "card": {
+    "root_cause_question": "Did a transient fault get encoded as a terminal state?",
+    "smallest_safe_fix": "Restore access; never encode transient faults as revoked.",
+    "guard": "Sphere pool saturation probe; revocation counter (pending)",
+    "owner": "senior",
+    "playbook": "01"
+   }
+  },
+  "tls-config": {
+   "desc": "TLS certificates or edge routing config are wrong: expiring or mismatched certs, traefik-dynamic drift.",
+   "key_prefixes": [
+    "tls-",
+    "traefik-dynamic-mode"
+   ],
+   "patterns": [
+    "certificate",
+    "\\btls\\b",
+    "\\bssl\\b",
+    "traefik",
+    "acme"
+   ],
+   "card": {
+    "root_cause_question": "Is a static cert shadowing ACME, or did a deploy change edge config?",
+    "smallest_safe_fix": "Remove the stale static cert / restore mode 700; let ACME renew.",
+    "guard": "served-cert expiry/validity per host; traefik-dynamic mode check",
+    "owner": "senior",
+    "playbook": "08 (4 Oct sign-in)"
+   }
+  },
+  "backup-failure": {
+   "desc": "A backup did not run, failed, or is older than its limit.",
+   "key_prefixes": [
+    "backup-",
+    "risk-backup-"
+   ],
+   "patterns": [
+    "backup",
+    "restic",
+    "snapshot (failed|missing)",
+    "last_ok"
+   ],
+   "card": {
+    "root_cause_question": "Did the job fail, or did its target (NAS, listener, address) disappear?",
+    "smallest_safe_fix": "Run the job to its interim target; fix the target; verify a restore.",
+    "guard": "backup status guard",
+    "owner": "guardian",
+    "playbook": "16"
+   }
+  },
+  "process-discipline": {
+   "desc": "An agent breaks a working rule: timestamps ahead of the clock, forbidden models, merges past gates.",
+   "key_prefixes": [
+    "senior-clock",
+    "vault-web-",
+    "forbidden-model-"
+   ],
+   "patterns": [
+    "ahead of the (real )?clock",
+    "astra",
+    "fable",
+    "merged past",
+    "without b3",
+    "vaultwarden web",
+    "web vault",
+    ":9443"
+   ],
+   "card": {
+    "root_cause_question": "Is the rule only written down? Move it to a lower ladder rung.",
+    "smallest_safe_fix": "Correct the artifact; encode the rule as a check (playbook 18).",
+    "guard": "senior-clock check; blocked-model check in the pulse",
+    "owner": "senior",
+    "playbook": "18 trust ladder"
+   }
+  },
+  "guard-defect": {
+   "desc": "GUARDIAN itself is wrong: a guard crashed, a false positive, a missed detection.",
+   "key_prefixes": [
+    "guard-crash-",
+    "watcher-dead"
+   ],
+   "patterns": [
+    "false positive",
+    "guard crashed",
+    "missed"
+   ],
+   "card": {
+    "root_cause_question": "Which assumption in the guard was wrong?",
+    "smallest_safe_fix": "Fix the guard the same pulse (estate-guardian PR); add the case to the eval set.",
+    "guard": "measure.py false-positive count",
+    "owner": "guardian",
+    "playbook": "13 autoresearch"
+   }
+  }
+ }
+}

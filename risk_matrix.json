@@ -1,0 +1,117 @@
+{
+ "_doc": "GUARDIAN prevention matrix: leading indicators checked every run. AMBER = act before it fails (Linear priority Low/Medium, no wake); RED = failure is imminent or certain (High, wakes on P0). Each row names the failure class it predicts and the prevention action. guardian.py guard_predict implements each 'measure'.",
+ "rows": [
+  {
+   "id": "disk-days-to-full",
+   "class": "disk-full",
+   "measure": "disk_projection",
+   "hosts": [
+    "nas",
+    "production",
+    "jupiter"
+   ],
+   "amber": "< 14 days to 95 %",
+   "red": "< 5 days to 95 %",
+   "prevent": "Find the grower (du at idle priority), archive to the NAS then prune regenerable data (playbook 08/16)."
+  },
+  {
+   "id": "jupiter-mem-headroom",
+   "class": "host-memory",
+   "measure": "jupiter_mem",
+   "amber": "MemAvailable < 14 GiB",
+   "red": "hosts guard (< 10 GiB)",
+   "prevent": "Stop seat-run suites; no new CI capacity; check which guest grew."
+  },
+  {
+   "id": "runner-label-coverage",
+   "class": "ci-capacity",
+   "measure": "label_coverage",
+   "amber": "-",
+   "red": "a workflow's runs-on label has no online runner",
+   "prevent": "Point the workflow at a served label (jack-ci-x64) or restore the runner before jobs queue (Tentacles CI starved 14 h, 10-11 Oct)."
+  },
+  {
+   "id": "ip-pin",
+   "class": "network-address",
+   "measure": "ip_pin_scan",
+   "amber": "-",
+   "red": "a live runner config still names the retired IP (config: dead_ip)",
+   "prevent": "Move the reference to the live IP; the retired interface is dead."
+  },
+  {
+   "id": "night-upgrades",
+   "class": "ci-runner-dead",
+   "measure": "apt_pending",
+   "amber": "docker/containerd/lxd upgrade pending on Jupiter or a CI guest",
+   "red": "-",
+   "prevent": "Hold those packages; upgrade in a drained window, never by unattended-upgrades at night."
+  },
+  {
+   "id": "tls-early",
+   "class": "tls-config",
+   "measure": "tls_days",
+   "amber": "< 30 days",
+   "red": "prod guard (< 14 days)",
+   "prevent": "Check ACME renewal and remove stale static certs before expiry."
+  },
+  {
+   "id": "senior-heartbeat-early",
+   "class": "pulse-blind",
+   "measure": "senior_hb",
+   "amber": "> 20 min",
+   "red": "lines guard (> 30 min)",
+   "prevent": "Senior's crons may be starving; wake before the alarm."
+  },
+  {
+   "id": "backup-age",
+   "class": "backup-failure",
+   "measure": "backup_status",
+   "amber": "age >= warn_h or last result not OK",
+   "red": "age >= fail_h",
+   "prevent": "Run the job to its interim target; fix the target; verify a restore."
+  },
+  {
+   "id": "provider-early",
+   "class": "provider-outage",
+   "measure": "provider_early",
+   "amber": "1-2 seats of one lab fail with one signature",
+   "red": "lines guard (3+ seats)",
+   "prevent": "Probe the lab; if it is the account, mark it OUT and broadcast before more lanes die."
+  },
+  {
+   "id": "pm2-dump-stale",
+   "class": "prod-down",
+   "measure": "pm2_dump",
+   "amber": "-",
+   "red": "a live release path is missing from dump.pm2, or the dump points at a release with no live app (compared by pm_cwd)",
+   "prevent": "pm2 save after every deploy (release lane); otherwise a reboot restores an old app set (3 Oct: 0 apps; 11 Oct: sphere-api missing)."
+  },
+  {
+   "id": "sphere-restart-reviewed",
+   "class": "auth-state",
+   "measure": "sphere_reviewed_start",
+   "amber": "-",
+   "red": "a service start with no LOCKED line in the reviewed-start log (config: production.custody_dir) within 60 s",
+   "prevent": "Only ~/sphere-reviewed-start.sh restarts sphere-api (custody env + flock); plain pm2 restart --update-env dropped the custody env (outage 11 Oct 09:52-09:54)."
+  },
+  {
+   "id": "tool-targets",
+   "class": "pulse-blind",
+   "measure": "tool_targets",
+   "amber": "an estate tool runs from a _worktrees/ or scratch path",
+   "red": "a wrapper's exec target is missing",
+   "prevent": "Estate tooling runs only from installed releases; worktrees are for development (11 Oct: deleted tentacles-computer-target worktree broke every --computer jupiter call 11:07-11:37)."
+  },
+  {
+   "id": "listeners-supervised",
+   "class": "prod-down",
+   "measure": "prod_listeners",
+   "amber": "any production listener without a supervisor",
+   "red": "a product port (3017/3018/3019/8000) without a supervisor",
+   "prevent": "Every production service runs under PM2 (and pm2 save), a systemd unit or docker; an orphan dies for good on crash or reboot."
+  }
+ ],
+ "label_exemptions": {
+  "windows": "win11-dev is stopped on purpose; the release captain starts it for Windows packaging (Senior, 11 Oct 08:07). Runner 22 is watched whenever the VM runs."
+ }
+}
