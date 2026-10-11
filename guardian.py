@@ -746,7 +746,7 @@ import json, os, re, subprocess, time, glob, datetime
 now = time.time()
 BTIME = int(next(l for l in open("/proc/stat") if l.startswith("btime")).split()[1])
 def sh(c): return subprocess.run(c, shell=True, capture_output=True, text=True).stdout
-god = [p for p in sh("pgrep -u "$(id -un)" -f '^PM2 v[0-9.]+: God Daemon'").split() if p]
+god = [p for p in sh("pgrep -u " + __import__("getpass").getuser() + " -f '^PM2 v[0-9.]+: God Daemon'").split() if p]
 live = []
 for g in god[:1]:
     for c in sh(f"pgrep -P {g}").split():
@@ -974,6 +974,13 @@ def guard_predict():
         d = json.loads(txt.strip().splitlines()[-1])
     except Exception:
         d = None
+    if not d:  # a broken probe must never look like a clean matrix (11 Oct: a quoting bug hid these rows for 2.5 h)
+        why = (_.strip().splitlines() or [f"ssh rc {rc}, no JSON"])[-1][:160]
+        for row in ("pm2-dump-stale", "listeners-supervised", "sphere-restart-reviewed"):
+            rows.append((row, "production", f"probe failed: {why}", "AMBER"))
+        out.append(F("prod-probe-failed", "guardian", "Production PM2/listener probe returns no data",
+                     f"The read-only production probe failed (rc {rc}): {why}. Until fixed, PM2 custody, unsupervised "
+                     "listeners and reviewed sphere restarts are unchecked.", grace=20, amber=True))
     if d:
         live = d["live"]  # [{"cwd":..., "start": epoch, "sphere_api": bool}]
         dump = [c for c in d["dump_cwds"] if "/releases/" in c]
