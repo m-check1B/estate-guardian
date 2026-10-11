@@ -1148,6 +1148,14 @@ def guard_vault_web():
 CODEX_PULSE = CFG["codex_pulse_label"]
 
 
+# Founder agreement 12 Oct 00:0x (POLICY-VAULT-AND-2FA.md): only these stay the Founder's; everything else a vault seat runs
+FOUNDER_ONLY = re.compile(r"2fa|two.factor|otp|authenticator|passkey|payment|pay |top.?up|billing|invoice|card|subscription|plan upgrade|"
+                          r"sign.?up|new account|create .{0,20}account|account creation|tcc|accessibility|input monitoring|microphone|"
+                          r"camera|gatekeeper|privacy|permission dialog|security dialog|physical|cable|device|legal|counsel|contract|"
+                          r"identity|apple team|developer account|play console|tailnet", re.I)
+POLICY_VAULT_2FA = 1791756000  # 12 Oct 2026 00:00 CEST: refusals filed after this are checked
+
+
 def guard_refusals():
     """Founder 11 Oct: refusals filed in Linear go to Codex. New open `refusals` issues kick the Founder's Codex
     refusal pulse at once (it holds the standing authorization, incl. vault briefs via nasvault on the Pro) and get a
@@ -1157,7 +1165,7 @@ def guard_refusals():
     if not key:
         return out
     q = ('query{issues(first:50,filter:{labels:{name:{eq:"refusals"}},state:{type:{nin:["completed","canceled"]},name:{neq:"Duplicate"}}})'
-         '{nodes{id identifier title createdAt comments(first:20){nodes{createdAt body}}}}}')
+         '{nodes{id identifier title description createdAt comments(first:20){nodes{createdAt body}}}}}')
     nodes = linear(q, {}, key)["issues"]["nodes"]
     seen = STATE.setdefault("refusals_seen", None)
     if seen is None:  # first run: everything already open is known; only new ones trigger
@@ -1176,11 +1184,25 @@ def guard_refusals():
                 f"{'already running and picks this up' if running else 'started now'} (Founder rule 11 Oct: refusals go to "
                 "Codex; standing authorization incl. vault briefs via ~/bin/nasvault on the Pro).")
         for n in new:
+            body = note
+            if not FOUNDER_ONLY.search(f"{n['title']} {n.get('description') or ''}"):
+                body += ("\n\nPolicy 12 Oct (POLICY-VAULT-AND-2FA.md): vault passwords and keys are for agents. A vault, "
+                         "credential or sign-in step runs on a Luna vault seat on the Pro (`HIRE_HOST=pro hire.sh luna "
+                         "<VAULT-BRIEF>.md`) started by the owning line, not as a #refusal. Only 2FA, payments/new accounts and "
+                         "macOS permission dialogs stay the Founder's. The plan gate for NEW credentials in external consoles "
+                         "still applies.")
             try:
                 linear('mutation($i:String!,$b:String!){commentCreate(input:{issueId:$i,body:$b}){success}}',
-                       {"i": n["id"], "b": note}, key)
+                       {"i": n["id"], "b": body}, key)
             except Exception:
                 pass
+    # Policy 12 Oct: a refusal that is not a Founder-only kind (2FA, payment/new account, macOS permission, physical,
+    # legal/identity) should have been a vault seat run: show it on the status page until it is closed.
+    for n in nodes:
+        if seen.get(n["identifier"], 0) >= POLICY_VAULT_2FA and not FOUNDER_ONLY.search(f"{n['title']} {n.get('description') or ''}"):
+            out.append(F(f"refusal-policy-{n['identifier']}", "guardian", f"{n['identifier']} filed as #refusal but a vault seat can run it",
+                         f"{n['title'][:120]}: route to a Luna vault seat on the Pro (POLICY-VAULT-AND-2FA.md).",
+                         grace=0, amber=True, file=False))
     # Plan gate (Founder 11 Oct): Codex posts "PLAN READY <issue> sha256:<12hex>"; GUARDIAN reviews and approves.
     pq = f"{STATE_DIR}/plan-reviews.jsonl"
     queued = STATE.setdefault("plans_queued", {})

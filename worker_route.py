@@ -37,7 +37,8 @@ ROUTING_LOG = os.environ.get("ESTATE_ROUTING_LOG", f"{ART}/worker-routing.jsonl"
 READINESS = os.environ.get("ESTATE_READINESS", f"{ART}/lab-readiness.json")
 USAGE = os.environ.get("ESTATE_USAGE", f"{ART}/lab-usage.json")
 RULES = [  # (lane, regex) checked on name + title + text; filename hints weigh double
-    ("vault", r"vault[-_ ]brief|nasvault|credential|api[ -]?key|token rotat|rotate .*token|password|keychain|notary|secret"),
+    ("vault", r"vault[-_ ]brief|nasvault|credential|api[ -]?key|token rotat|rotate .*token|password|keychain|notary|secret|"
+              r"sign[- ]in to (?:the )?(?:cloudflare|namecheap|tailscale|linear|zitadel|google|apple|github|openrouter)"),
     ("clicker", r"ui prove|click|browser|playwright|e2e|screenshot|user ?test|usertest|desktop[- ]app check|recon|scout|walk ?through|computer use"),
     ("sort", r"\bclassif|\btriage|\bextract|\blabel(l)?ing|\bdedup|\binventory|\bsort(ing)?\b|categori[sz]e|route .* items|tag each"),
     ("everyday", r"\bbug ?fix|\bfix the|\brebase|\btests?\b|\blint|\brefactor|\bdocs?\b|readme|\bslides?\b|spreadsheet|\bci\b|flak|\bbump|\brename|\bhelper\b|call sites"),
