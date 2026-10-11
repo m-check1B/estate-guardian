@@ -1,17 +1,37 @@
 # estate-guardian
 
-A no-AI reliability guard for a small estate run by AI agent "lines": seats in T3 Code and Tentacles, Forgejo CI, LXD hosts and production. It also has a **multi-lab worker router** that routes work across Anthropic, OpenAI Codex, Cursor and xAI. The router has usage-aware on/off switches (T3/Tentacles readiness plus [CodexBar](https://github.com/steipete/CodexBar) plan usage) and clean fallbacks. A **pain → solution classifier** uses rules and a decision model, and a **prevention matrix** flags failures before they happen.
+**estate-guardian keeps a team of AI coding agents working through the night, without a person watching.** We build our company's software with many AI agents at once (Claude, OpenAI Codex, Cursor and Grok), and they fail in boring ways: a plan runs out of credit, a CI runner dies, a disk fills up, a server restarts and a service does not come back. estate-guardian is a plain Python script with no AI inside. Every 5 minutes it checks all of that, sends each new job to an AI lab that is actually available right now, and opens a ticket with the fix when something breaks. Problems get caught at 3 a.m., not at breakfast.
 
-It was built in one day by an AI reliability line (GUARDIAN) after a run of night-time incidents. This is our real setup, published as an example. Every estate-specific value lives in `estate.local.json` outside the repo; `estate.example.json` shows the schema.
+![How we orchestrate agents: any chair → worker router → Tentacles → T3 Code → any lab, kept alive by estate-guardian](docs/orchestration.svg)
+
+## How we orchestrate agents
+
+The point is the chain, and it works with any orchestrator ("chair"): [Agent Jack](https://agentjack.dev), Claude Code, the [Grok Bot](https://x.ai/bot/0fYZ_kKkiXNbLn_KBD3f3), Codex or anything else that can run a shell command.
+
+1. **The chair writes a brief** (a Markdown file: what to do, picture of done).
+2. **`worker_route.py` picks the lab.** It sorts the brief into a lane (vault, clicker, sort, everyday, judgement, marketing) and picks a lab and budget that are ON right now. If the first choice is out of usage it walks a declared fallback chain, and it spreads everyday work across vendors.
+3. **[Tentacles](https://github.com/m-check1B/t3-code-tentacles) carries the job.** It is our open-source (MIT) command line for [T3 Code](https://github.com/pingdotgg/t3code): `tentacles originate` starts a worker thread with an exact instance, model and thought budget; `tentacles act` / `report` steer and read it; `tentacles doctor --json` says which labs are ready on each machine.
+4. **[T3 Code](https://github.com/pingdotgg/t3code) runs the worker.** One app hosts many agent CLIs (Claude Code, Codex, Cursor, Grok Code, OpenCode) as threads you can watch, stop and resume. The worker opens a PR on our own forge and a reviewer merges.
+5. **estate-guardian keeps the chain alive.** It reads lab readiness from Tentacles, plan usage from [CodexBar](https://github.com/steipete/CodexBar) and seat errors from T3, flips labs OFF and back ON, and files every failure into Linear with its smallest safe fix.
+
+## Try it
+
+```bash
+git clone https://github.com/m-check1B/estate-guardian.git && cd estate-guardian
+python3 -m unittest test_worker_route          # 13 offline router tests
+ROUTER_NO_JEV=1 python3 worker_route.py some-brief.md "Fix the failing lint"
+```
+
+The router runs as is from `labs.example.json`. The guard needs your own `estate.local.json` (schema in `estate.example.json`: hosts, Linear team, Forgejo, probes); every estate-specific value lives there, outside git.
 
 Main files:
 - `guardian.py`: the 5-minute guard;
-- `worker_route.py`: the multi-lab router;
-- `classify.py` with `taxonomy.json`: the problem classifier;
+- `worker_route.py` + `labs.example.json`: the multi-lab router and its ON / OFF / NEVER policy;
+- `classify.py` + `taxonomy.json`: the pain → solution classifier;
 - `risk_matrix.json`: the prevention matrix;
-- `install.sh`: the macOS launchd job.
+- `install.sh`: the macOS launchd job; `publish-public.sh`: how this public copy is cut from our private repo.
 
-License: MIT.
+Built by an AI reliability line (GUARDIAN, a Claude Code seat) after a run of night-time incidents, and published as a real working example. By [Verduona](https://verduona.com) · [Kraliki](https://kraliki.com) · [m-check1b.com](https://m-check1b.com). License: MIT.
 
 ---
 

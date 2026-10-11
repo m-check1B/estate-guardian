@@ -1,0 +1,174 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>Agent orchestration: any chair → worker router → Tentacles → T3 Code → any lab, kept alive by estate-guardian</title>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#374151"/>
+    </marker>
+    <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#0369a1"/>
+    </marker>
+  </defs>
+  <style>
+    .h { font-size: 15px; font-weight: 700; fill: #111827 }
+    .s { font-size: 12.5px; fill: #374151 }
+    .m { font-size: 11.5px; fill: #6b7280 }
+    .k { font-size: 11px; font-weight: 700; letter-spacing: .06em; fill: #6b7280 }
+    .lbl { font-size: 11.5px; fill: #374151; font-weight: 600 }
+    .glbl { font-size: 11.5px; fill: #0369a1; font-weight: 600 }
+    .chip { font-size: 10.5px; font-weight: 700 }
+  </style>
+
+  <rect x="1" y="1" width="1198" height="658" rx="18" fill="#ffffff" stroke="#e5e7eb" stroke-width="2"/>
+  <text x="40" y="48" font-size="22" font-weight="800" fill="#111827">How we orchestrate agents</text>
+  <text x="40" y="70" class="s">Any chair hands a brief to the router; Tentacles drives T3 Code; T3 Code runs the chosen lab's CLI. estate-guardian keeps every link alive.</text>
+
+  <!-- column labels -->
+  <text x="40" y="112" class="k">1 · CHAIR</text>
+  <text x="270" y="112" class="k">2 · WORKER ROUTER</text>
+  <text x="500" y="112" class="k">3 · TENTACLES</text>
+  <text x="730" y="112" class="k">4 · T3 CODE</text>
+  <text x="960" y="112" class="k">5 · LABS (ON / OFF / NEVER)</text>
+
+  <!-- 1 chairs -->
+  <g>
+    <rect x="40" y="124" width="190" height="52" rx="10" fill="#eef2ff" stroke="#6366f1"/>
+    <text x="56" y="147" class="h">Agent Jack</text><text x="56" y="165" class="m">our product's Talk chair</text>
+    <rect x="40" y="186" width="190" height="52" rx="10" fill="#eef2ff" stroke="#6366f1"/>
+    <text x="56" y="209" class="h">Claude Code</text><text x="56" y="227" class="m">Opus seats (this repo's author)</text>
+    <rect x="40" y="248" width="190" height="52" rx="10" fill="#eef2ff" stroke="#6366f1"/>
+    <text x="56" y="271" class="h">Grok Bot</text><text x="56" y="289" class="m">public chair share</text>
+    <rect x="40" y="310" width="190" height="52" rx="10" fill="#eef2ff" stroke="#6366f1"/>
+    <text x="56" y="333" class="h">Codex · any CLI</text><text x="56" y="351" class="m">anything that runs a shell</text>
+  </g>
+
+  <!-- 2 router -->
+  <rect x="270" y="124" width="190" height="238" rx="10" fill="#ecfdf5" stroke="#10b981"/>
+  <text x="286" y="148" class="h">worker_route.py</text>
+  <text x="286" y="172" class="s">brief.md → lane</text>
+  <text x="286" y="189" class="m">rules first, Jev model if unsure</text>
+  <text x="286" y="214" class="s">lanes</text>
+  <text x="286" y="231" class="m">vault · clicker · sort</text>
+  <text x="286" y="247" class="m">everyday · judgement · marketing</text>
+  <text x="286" y="272" class="s">→ lab + budget</text>
+  <text x="286" y="289" class="m">declared fallback chain</text>
+  <text x="286" y="305" class="m">spread across vendors by usage</text>
+  <text x="286" y="330" class="s">13 offline tests</text>
+  <text x="286" y="347" class="m">none usable → blocked</text>
+
+  <!-- 3 tentacles -->
+  <rect x="500" y="124" width="190" height="238" rx="10" fill="#fff7ed" stroke="#f97316"/>
+  <text x="516" y="148" class="h">Tentacles</text>
+  <text x="516" y="165" class="m">github.com/m-check1B/</text>
+  <text x="516" y="180" class="m">t3-code-tentacles · MIT</text>
+  <text x="516" y="206" class="s">tentacles originate</text>
+  <text x="516" y="223" class="s">tentacles act / report</text>
+  <text x="516" y="240" class="s">tentacles doctor --json</text>
+  <text x="516" y="266" class="m">chairs drive T3 without the GUI</text>
+  <text x="516" y="283" class="m">instance, model, budget</text>
+  <text x="516" y="300" class="m">per host: Mac + Linux dev VM</text>
+  <text x="516" y="326" class="s">readiness per lab</text>
+  <text x="516" y="343" class="m">feeds the router's switches</text>
+
+  <!-- 4 t3 code -->
+  <rect x="730" y="124" width="190" height="238" rx="10" fill="#f5f3ff" stroke="#8b5cf6"/>
+  <text x="746" y="148" class="h">T3 Code</text>
+  <text x="746" y="165" class="m">github.com/pingdotgg/t3code</text>
+  <text x="746" y="191" class="s">one app, many agent CLIs</text>
+  <text x="746" y="208" class="m">Claude Code · Codex · Cursor</text>
+  <text x="746" y="224" class="m">Grok Code · OpenCode</text>
+  <text x="746" y="250" class="s">threads = worker seats</text>
+  <text x="746" y="267" class="m">full-access runtime, observable</text>
+  <text x="746" y="284" class="m">stoppable, resumable</text>
+  <text x="746" y="310" class="s">worker opens a PR</text>
+  <text x="746" y="327" class="m">to our own forge (Forgejo);</text>
+  <text x="746" y="343" class="m">a reviewer merges</text>
+
+  <!-- 5 labs -->
+  <g>
+    <rect x="960" y="124" width="200" height="44" rx="10" fill="#f8fafc" stroke="#94a3b8"/>
+    <text x="974" y="143" class="h" font-size="13.5">Anthropic</text><text x="974" y="159" class="m">Opus · Sonnet · Haiku</text>
+    <rect x="1112" y="135" width="36" height="20" rx="10" fill="#dcfce7"/><text x="1121" y="149" class="chip" fill="#15803d">ON</text>
+
+    <rect x="960" y="176" width="200" height="44" rx="10" fill="#f8fafc" stroke="#94a3b8"/>
+    <text x="974" y="195" class="h" font-size="13.5">OpenAI Codex</text><text x="974" y="211" class="m">Luna (high / medium)</text>
+    <rect x="1112" y="187" width="36" height="20" rx="10" fill="#dcfce7"/><text x="1121" y="201" class="chip" fill="#15803d">ON</text>
+
+    <rect x="960" y="228" width="200" height="44" rx="10" fill="#f8fafc" stroke="#94a3b8"/>
+    <text x="974" y="247" class="h" font-size="13.5">Cursor</text><text x="974" y="263" class="m">Composer</text>
+    <rect x="1112" y="239" width="36" height="20" rx="10" fill="#dcfce7"/><text x="1121" y="253" class="chip" fill="#15803d">ON</text>
+
+    <rect x="960" y="280" width="200" height="44" rx="10" fill="#f8fafc" stroke="#94a3b8"/>
+    <text x="974" y="299" class="h" font-size="13.5">xAI</text><text x="974" y="315" class="m">Grok Code · until reset</text>
+    <rect x="1104" y="291" width="44" height="20" rx="10" fill="#fef3c7"/><text x="1113" y="305" class="chip" fill="#b45309">OFF</text>
+
+    <rect x="960" y="332" width="200" height="30" rx="10" fill="#f9fafb" stroke="#d1d5db" stroke-dasharray="4 3"/>
+    <text x="974" y="352" class="m">banned models</text>
+    <rect x="1092" y="337" width="56" height="20" rx="10" fill="#f3f4f6"/><text x="1099" y="351" class="chip" fill="#6b7280">NEVER</text>
+  </g>
+
+  <!-- main flow arrows -->
+  <path d="M230 243 H266" stroke="#374151" stroke-width="2" fill="none" marker-end="url(#a)"/>
+  <text x="235" y="236" class="lbl">brief</text>
+  <path d="M460 243 H496" stroke="#374151" stroke-width="2" fill="none" marker-end="url(#a)"/>
+  <text x="463" y="236" class="lbl">lab</text>
+  <path d="M690 243 H726" stroke="#374151" stroke-width="2" fill="none" marker-end="url(#a)"/>
+  <text x="693" y="236" class="lbl">act</text>
+  <path d="M920 243 H956" stroke="#374151" stroke-width="2" fill="none" marker-end="url(#a)"/>
+  <text x="923" y="236" class="lbl">CLI</text>
+
+  <!-- report back -->
+  <path d="M825 124 V101 Q825 93 817 93 H168 Q160 93 160 101 V120" stroke="#374151" stroke-width="1.5" stroke-dasharray="5 4" fill="none" marker-end="url(#a)"/>
+  <text x="330" y="88" class="lbl" font-weight="600">result, PR link, evidence → back to the chair (tentacles report)</text>
+
+  <!-- guardian band -->
+  <rect x="40" y="420" width="1120" height="200" rx="12" fill="#f0f9ff" stroke="#0ea5e9"/>
+  <text x="58" y="448" class="h" fill="#0c4a6e">estate-guardian: no-AI guard, every 5 min, files work into Linear</text>
+
+  <rect x="58" y="464" width="248" height="138" rx="10" fill="#ffffff" stroke="#bae6fd"/>
+  <text x="72" y="486" class="s" font-weight="700">Watch</text>
+  <text x="72" y="506" class="m">CI runners · seats · hosts · prod</text>
+  <text x="72" y="522" class="m">TLS · backups · repo mirrors</text>
+  <text x="72" y="538" class="m">refusals · plan gate · heartbeats</text>
+  <text x="72" y="562" class="s" font-weight="700">Switch labs</text>
+  <text x="72" y="580" class="m">CodexBar plan usage · 402 / quota</text>
+  <text x="72" y="595" class="m">→ OFF, auto-ON at the reset</text>
+
+  <rect x="324" y="464" width="248" height="138" rx="10" fill="#ffffff" stroke="#bae6fd"/>
+  <text x="338" y="486" class="s" font-weight="700">Classify pain → solution</text>
+  <text x="338" y="506" class="m">rules, then the Jev decision model</text>
+  <text x="338" y="522" class="m">15 failure classes, each with</text>
+  <text x="338" y="538" class="m">its smallest safe fix + guard</text>
+  <text x="338" y="562" class="s" font-weight="700">Route to the owner</text>
+  <text x="338" y="580" class="m">one Linear issue per finding,</text>
+  <text x="338" y="595" class="m">P0 wakes a standby seat at night</text>
+
+  <rect x="590" y="464" width="248" height="138" rx="10" fill="#ffffff" stroke="#bae6fd"/>
+  <text x="604" y="486" class="s" font-weight="700">Prevent</text>
+  <text x="604" y="506" class="m">risk matrix: disk days-to-full,</text>
+  <text x="604" y="522" class="m">memory headroom, TLS expiry,</text>
+  <text x="604" y="538" class="m">night upgrades, orphan services</text>
+  <text x="604" y="562" class="s" font-weight="700">Root cause, then a guard</text>
+  <text x="604" y="580" class="m">restoring a service is not the fix;</text>
+  <text x="604" y="595" class="m">every lesson becomes a check</text>
+
+  <rect x="856" y="464" width="286" height="138" rx="10" fill="#ffffff" stroke="#bae6fd"/>
+  <text x="870" y="486" class="s" font-weight="700">Self-improve (autoresearch loop)</text>
+  <text x="870" y="506" class="m">fixed evaluator over our own incidents</text>
+  <text x="870" y="522" class="m">change one rule → measure → keep or</text>
+  <text x="870" y="538" class="m">discard; leakage check on the eval</text>
+  <text x="870" y="562" class="s" font-weight="700">Trust ladder</text>
+  <text x="870" y="580" class="m">code / CI guard  &gt;  pulse check</text>
+  <text x="870" y="595" class="m">&gt;  written rule</text>
+
+  <!-- feedback arrows guardian <-> flow -->
+  <path d="M365 420 V366" stroke="#0369a1" stroke-width="2" stroke-dasharray="6 4" fill="none" marker-end="url(#g)"/>
+  <text x="372" y="398" class="glbl">on / off + fallbacks</text>
+  <path d="M595 366 V416" stroke="#0369a1" stroke-width="2" stroke-dasharray="6 4" fill="none" marker-end="url(#g)"/>
+  <text x="602" y="398" class="glbl">readiness</text>
+  <path d="M825 366 V416" stroke="#0369a1" stroke-width="2" stroke-dasharray="6 4" fill="none" marker-end="url(#g)"/>
+  <text x="832" y="398" class="glbl">seat errors</text>
+  <path d="M1060 366 V416" stroke="#0369a1" stroke-width="2" stroke-dasharray="6 4" fill="none" marker-end="url(#g)"/>
+  <text x="1067" y="398" class="glbl">plan usage</text>
+
+  <text x="40" y="645" class="m">github.com/m-check1B/estate-guardian · github.com/m-check1B/t3-code-tentacles · github.com/pingdotgg/t3code · MIT</text>
+</svg>
