@@ -9,7 +9,7 @@ Tier 3: low confidence -> "unclassified"; the case is appended to guardian/needs
 
 Usage: classify.py "<text>" [--key finding-key] [--no-jev]   |   import classify; classify.classify(text, key)
 """
-import json, os, re, subprocess, sys, time, urllib.request
+import hashlib, json, os, re, subprocess, sys, time, urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TAX = json.load(open(os.path.join(HERE, "taxonomy.json")))["classes"]
@@ -35,39 +35,71 @@ def rules(text, key=""):
     return None, 0.0, "none"
 
 
-def jev(text):
-    k = ""
+JEV_ANSWERS = os.path.expanduser(os.environ.get("ESTATE_JEV_ANSWERS", "~/Developer-artifacts/guardian/jev-answers.jsonl"))
+
+
+def _jev_key():
     for item in JEV_ITEMS:
         r = subprocess.run(["security", "find-generic-password", "-s", item, "-w"], capture_output=True, text=True, timeout=10)
-        k = r.stdout.strip() if r.returncode == 0 else ""
-        if k:
-            break
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
+    return ""
+
+
+def jev_ask(state, questions, replay_only=False):
+    """One typed Jev request, with every answer retained (AgentRun lesson, 12 Oct 2026: keep the answers so a
+    threshold or code change is a free replay, not new model calls). The fingerprint covers the model, the state and
+    the full question text, so editing a question's criteria makes a new request, while editing the code that reads
+    the answers replays the stored ones. Returns (answers | None, how)."""
+    body = {"model": "jev-latest", "state": state[:4000], "questions": questions}
+    fp = hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()[:24]
+    try:
+        for line in open(JEV_ANSWERS):
+            d = json.loads(line)
+            if d.get("fp") == fp:
+                return d["answers"], "jev-replay"
+    except FileNotFoundError:
+        pass
+    if replay_only:
+        return None, "jev-not-in-replay"
+    k = _jev_key()
     if not k:
-        return None, 0.0, "jev-no-key"
-    body = {"model": "jev-latest", "state": text[:4000], "questions": {"cls": {
-        "type": "choice", "instructions": "Which failure mechanism best explains this infrastructure or delivery problem?",
-        "criteria": {cid: c["desc"] for cid, c in TAX.items()}}}}
+        return None, "jev-no-key"
     req = urllib.request.Request(JEV_URL, data=json.dumps(body).encode(),
                                  headers={"Authorization": f"Bearer {k}", "Content-Type": "application/json", "User-Agent": UA})
     for attempt in range(3):
         try:
             with urllib.request.urlopen(req, timeout=20) as resp:
-                a = json.load(resp)["answers"]["cls"]
-            return a["choice"], float(a.get("confidence", 0)), "jev"
+                answers = json.load(resp)["answers"]
+            os.makedirs(os.path.dirname(JEV_ANSWERS), exist_ok=True)
+            with open(JEV_ANSWERS, "a") as f:
+                f.write(json.dumps({"fp": fp, "at": time.strftime("%Y-%m-%dT%H:%M:%S"), "state": state[:4000],
+                                    "questions": list(questions), "answers": answers}) + "\n")
+            return answers, "jev"
         except urllib.error.HTTPError as e:
             if e.code in (429, 529) and attempt < 2:
                 time.sleep(2 ** attempt)
                 continue
-            return None, 0.0, f"jev-http-{e.code}"
+            return None, f"jev-http-{e.code}"
         except Exception as e:
-            return None, 0.0, f"jev-{type(e).__name__}"
-    return None, 0.0, "jev-retry"
+            return None, f"jev-{type(e).__name__}"
+    return None, "jev-retry"
 
 
-def classify(text, key="", use_jev=True, record=True):
+def jev(text, replay_only=False):
+    answers, how = jev_ask(text, {"cls": {
+        "type": "choice", "instructions": "Which failure mechanism best explains this infrastructure or delivery problem?",
+        "criteria": {cid: c["desc"] for cid, c in TAX.items()}}}, replay_only=replay_only)
+    if not answers:
+        return None, 0.0, how
+    a = answers["cls"]
+    return a["choice"], float(a.get("confidence", 0)), how
+
+
+def classify(text, key="", use_jev=True, record=True, replay_only=False):
     cid, conf, how = rules(text, key)
     if not cid and use_jev:
-        cid, conf, how = jev(text)
+        cid, conf, how = jev(text, replay_only=replay_only)
     if not cid or conf < MIN_CONF:
         if record:
             try:

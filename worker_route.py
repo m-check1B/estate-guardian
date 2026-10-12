@@ -74,22 +74,14 @@ def jev_lane(text):
     if os.environ.get("ROUTER_NO_JEV"):  # offline / tests: rules + default only
         return None, 0.0
     try:
-        import classify  # reuses the Keychain key handling (Founder-authorized), UA and retries
-        import urllib.request
-        k = ""
-        for item in classify.JEV_ITEMS:
-            r = classify.subprocess.run(["security", "find-generic-password", "-s", item, "-w"], capture_output=True, text=True, timeout=10)
-            if r.returncode == 0 and r.stdout.strip():
-                k = r.stdout.strip(); break
-        if not k:
+        import classify  # shared Jev client: Keychain key, UA, retries, and every answer retained for replay
+        answers, _ = classify.jev_ask(text, {"lane": {"type": "choice",
+                                       "instructions": "Which kind of worker should take this engineering brief?",
+                                       "criteria": {l: v["desc"] for l, v in LANES.items()}}},
+                                      replay_only=bool(os.environ.get("ROUTER_JEV_REPLAY")))
+        if not answers:
             return None, 0.0
-        body = {"model": "jev-latest", "state": text[:4000], "questions": {"lane": {"type": "choice",
-                "instructions": "Which kind of worker should take this engineering brief?",
-                "criteria": {l: v["desc"] for l, v in LANES.items()}}}}
-        req = urllib.request.Request(classify.JEV_URL, data=json.dumps(body).encode(), headers={
-            "Authorization": f"Bearer {k}", "Content-Type": "application/json", "User-Agent": classify.UA})
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            a = json.load(resp)["answers"]["lane"]
+        a = answers["lane"]
         return a["choice"], float(a.get("confidence", 0))
     except Exception:
         return None, 0.0
