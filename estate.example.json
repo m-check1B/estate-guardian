@@ -255,5 +255,8 @@
  "scheduled_tasks": {
   "<task-id>": 30
  },
- "claude_sessions_dir": "~/Library/Application Support/Claude/claude-code-sessions"
+ "claude_sessions_dir": "~/Library/Application Support/Claude/claude-code-sessions",
+ "paused_lines": {
+  "<owner>": "<why, who paused it>"
+ }
 }

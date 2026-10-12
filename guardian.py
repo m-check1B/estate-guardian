@@ -556,9 +556,10 @@ def guard_lines():
     refresh_lab_readiness()
     refresh_lab_usage()
     out = []
+    paused = CFG.get("paused_lines") or {}  # Founder-paused pulses (e.g. Syfon 12 Oct) are not stale
     for name, owner, limit, *optional in HEARTBEATS:
         p = f"{ART}/{name}"
-        if optional and not os.path.exists(p):
+        if owner in paused or (optional and not os.path.exists(p)):
             continue
         try:
             v = int(re.sub(r"\D", "", open(p).read())[:10])
@@ -1338,7 +1339,13 @@ def guard_scheduler():
         if not t or not c0:
             continue
         last[t] = max(last.get(t, 0), c0)
-        if la - c0 > 45 * 60 and NOW - la < 15 * 60 and not d.get("isArchived"):
+        if d.get("isArchived"):
+            continue
+        # hung: no turn ever completed (12 Oct 18:58 run waited 40 min on an approval prompt; scheduled runs use
+        # permissionMode "default"); long: a run someone continued into a conversation (scheduledRunContinued)
+        if not d.get("completedTurns") and NOW - c0 > 20 * 60 and NOW - c0 < 3 * 86400:
+            long_runs.append((t, d.get("sessionId"), (NOW - c0) / 60))
+        elif la - c0 > 45 * 60 and NOW - la < 15 * 60:
             long_runs.append((t, d.get("sessionId"), (la - c0) / 60))
     out = []
     for t, sid, mins in long_runs:
