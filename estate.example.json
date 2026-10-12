@@ -212,15 +212,15 @@
   "edge_config_dir": "/home/appuser/github/infra/compose/traefik-dynamic",
   "critical_ports": {
    "3017": [
-    "Bezpečnost práce backend",
+    "Bezpe\u010dnost pr\u00e1ce backend",
     "bezpecnost"
    ],
    "3018": [
-    "Bezpečnost práce gateway",
+    "Bezpe\u010dnost pr\u00e1ce gateway",
     "bezpecnost"
    ],
    "3019": [
-    "Bezpečnost práce frontend",
+    "Bezpe\u010dnost pr\u00e1ce frontend",
     "bezpecnost"
    ],
    "8000": [
@@ -242,5 +242,9 @@
   "com.example.typesafe.guardian",
   "example/typesafe-key"
  ],
- "_doc": "Copy to ~/Developer-artifacts/guardian/estate.local.json (outside the repo) and fill in your estate. Never commit the real file."
+ "_doc": "Copy to ~/Developer-artifacts/guardian/estate.local.json (outside the repo) and fill in your estate. Never commit the real file.",
+ "grafana": {
+  "url": "http://<grafana-host>:3000",
+  "prometheus_uid": "<prometheus datasource uid>"
+ }
 }

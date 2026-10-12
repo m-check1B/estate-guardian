@@ -103,7 +103,8 @@
     "jupiter-disk",
     "pro-disk",
     "mini-disk",
-    "risk-disk-"
+    "risk-disk-",
+    "obs-alert-NasVolumeFull"
    ],
    "patterns": [
     "enospc",
@@ -221,7 +222,8 @@
    "key_prefixes": [
     "prod-down-",
     "risk-pm2-dump",
-    "prod-orphan-"
+    "prod-orphan-",
+    "obs-alert-"
    ],
    "patterns": [
     "5\\d\\d\\b",
@@ -332,7 +334,11 @@
    "desc": "GUARDIAN itself is wrong: a guard crashed, a false positive, a missed detection.",
    "key_prefixes": [
     "guard-crash-",
-    "watcher-dead"
+    "watcher-dead",
+    "obs-down-",
+    "obs-unreachable",
+    "prod-probe-failed",
+    "mirror-check"
    ],
    "patterns": [
     "false positive",

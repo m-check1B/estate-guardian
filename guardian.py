@@ -21,6 +21,7 @@ Usage: guardian.py [--dry-run] [--only ci,hosts,...]
 """
 import concurrent.futures as cf, datetime as dt, hashlib, json, os, re, socket, sqlite3, ssl, subprocess, sys, time
 import urllib.request
+import urllib.parse
 
 # Cloudflare refuses Python's default 'Python-urllib/3.x' UA (403, error 1010; 11 Oct). Every request sets one.
 UA = "estate-guardian/1"
@@ -1279,8 +1280,41 @@ def guard_mirrors():
             for src, dst in leaks]
 
 
+def prom(expr):
+    """Instant query through Grafana's datasource proxy (anonymous viewer on the tailnet)."""
+    g = CFG.get("grafana") or {}
+    url = f"{g['url']}/api/datasources/proxy/uid/{g['prometheus_uid']}/api/v1/query?" + urllib.parse.urlencode({"query": expr})
+    with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": UA}), timeout=15) as r:
+        return json.load(r)["data"]["result"]
+
+
+def guard_observability():
+    """12 Oct: the estate dashboard showed Sphere pg_up=0 (red tile) for 9 days with no alert rule behind it, so nobody
+    acted. Read the dashboard's own signals: firing estate alerts, and any estate scrape or exporter that is down."""
+    if not CFG.get("grafana"):
+        return []
+    out = []
+    try:
+        for r in prom('ALERTS{estate="true",alertstate="firing"}'):
+            m = r["metric"]
+            out.append(F(f"obs-alert-{m.get('alertname', '?')}-{m.get('host', m.get('instance', '?'))}", "senior",
+                         f"Grafana estate alert firing: {m.get('alertname')} ({m.get('host') or m.get('instance')})",
+                         json.dumps({k: v for k, v in m.items() if k not in ('__name__', 'alertstate')})[:300], grace=60, amber=True))
+        down = prom('pg_up{estate="true"} == 0 or max_over_time(up{estate="true"}[30m]) == 0')
+        for r in down:
+            m = r["metric"]
+            what = m.get("exported_job") or m.get("job") or "?"
+            out.append(F(f"obs-down-{what}-{m.get('host', m.get('instance', '?'))}", "senior",
+                         f"Estate monitor blind: {m.get('__name__', 'up')} = 0 for {what} on {m.get('host') or m.get('instance')}",
+                         "The dashboard tile is red and no alert rule covers it. Restore the scrape/exporter, or retire the target "
+                         "from the dashboard. " + json.dumps({k: v for k, v in m.items() if k != '__name__'})[:300], grace=60, amber=True))
+    except Exception as e:
+        out.append(F("obs-unreachable", "guardian", "Grafana/Prometheus not readable from the Pro", str(e)[:200], grace=60, amber=True))
+    return out
+
+
 GUARDS = {"ci": guard_ci, "handoffs": guard_handoffs, "lines": guard_lines, "hosts": guard_hosts, "prod": guard_prod,
-          "predict": guard_predict, "vault": guard_vault_web, "refusals": guard_refusals, "mirrors": guard_mirrors}
+          "predict": guard_predict, "vault": guard_vault_web, "refusals": guard_refusals, "mirrors": guard_mirrors, "observability": guard_observability}
 
 
 # ---------------------------------------------------------------- Linear + state
