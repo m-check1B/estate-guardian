@@ -168,6 +168,11 @@
    "bezpecnost",
    80,
    true
+  ],
+  [
+   "GUARDIAN-PULSE-HEARTBEAT",
+   "guardian",
+   70
   ]
  ],
  "endpoints": [
@@ -246,5 +251,9 @@
  "grafana": {
   "url": "http://<grafana-host>:3000",
   "prometheus_uid": "<prometheus datasource uid>"
- }
+ },
+ "scheduled_tasks": {
+  "<task-id>": 30
+ },
+ "claude_sessions_dir": "~/Library/Application Support/Claude/claude-code-sessions"
 }

@@ -571,7 +571,9 @@ def guard_lines():
             task = "jack" if owner == "senior" else owner
             durable = os.path.exists(os.path.expanduser(f"~/.claude/scheduled-tasks/{task}-pulse-watchdog/SKILL.md"))
             out.append(F(f"heartbeat-{name}", owner, f"{name} is {int(age)} min old (limit {limit})",
-                         f"The {owner} line's pulse has not run. Its session crons may be dead; re-create them." +
+                         f"The {owner} line's pulse has not run. Its session crons may be dead; re-create them. "
+                         "A durable task fires nothing while one of its runs is still 'running' (12 Oct: the GUARDIAN "
+                         "pulse run grew into a 539-message session, stuck in Bash for 21 h): stop that run in the task's Runs pane." +
                          ("" if durable else f" No durable watchdog (~/.claude/scheduled-tasks/{task}-pulse-watchdog): "
                           "session crons starve while busy; add one."),
                          grace=0, p0=owner == "senior", nudge=owner == "senior", hold=0 if durable else 24))
@@ -1316,8 +1318,46 @@ def guard_observability():
     return out
 
 
+def guard_scheduler():
+    """12 Oct: four scheduled runs (GUARDIAN pulse 20:57, Senior pulse 23:55, Syfon 01:51, autoresearch 03:16) never
+    ended. Each blocks its own task, and together they filled the app's concurrent-run slots: from 03:16 to 18:39 no
+    scheduled task fired anywhere (Tržnice watchdog, the 07:31 digest). Read the app's session records: a run active
+    for over 45 min is stuck; an enabled task with no run for 2x its interval (+15 min) is not firing."""
+    want = CFG.get("scheduled_tasks") or {}
+    base = os.path.expanduser(CFG.get("claude_sessions_dir", ""))
+    if not want or not os.path.isdir(base):
+        return []
+    import glob as _glob
+    last, long_runs = {}, []
+    for f in _glob.glob(f"{base}/*/*/local_*.json"):
+        try:
+            d = json.load(open(f))
+        except Exception:
+            continue
+        t, c0, la = d.get("scheduledTaskId"), (d.get("createdAt") or 0) / 1000, (d.get("lastActivityAt") or 0) / 1000
+        if not t or not c0:
+            continue
+        last[t] = max(last.get(t, 0), c0)
+        if la - c0 > 45 * 60 and NOW - la < 15 * 60 and not d.get("isArchived"):
+            long_runs.append((t, d.get("sessionId"), (la - c0) / 60))
+    out = []
+    for t, sid, mins in long_runs:
+        out.append(F(f"sched-stuck-{t}", "guardian" if t.startswith("guardian") else "senior",
+                     f"Scheduled run of {t} active for {mins:.0f} min (blocks its task; 3-4 such runs stop ALL tasks)",
+                     f"Session {sid}. A pulse run must end within ~20 min; long work goes to a hire. Stop or finish this run.",
+                     grace=20, p0=len(long_runs) >= 3, amber=len(long_runs) < 3))
+    for t, every in want.items():
+        age = (NOW - last.get(t, 0)) / 60
+        if age > 2 * every + 15:
+            out.append(F(f"sched-silent-{t}", "guardian" if t.startswith("guardian") else "senior",
+                         f"Scheduled task {t} has not run for {age:.0f} min (every {every} min)",
+                         "Check list_scheduled_tasks: registration present and enabled? A run stuck open (see sched-stuck-*)? "
+                         "Too many concurrent scheduled runs?", grace=0, amber=True))
+    return out
+
+
 GUARDS = {"ci": guard_ci, "handoffs": guard_handoffs, "lines": guard_lines, "hosts": guard_hosts, "prod": guard_prod,
-          "predict": guard_predict, "vault": guard_vault_web, "refusals": guard_refusals, "mirrors": guard_mirrors, "observability": guard_observability}
+          "predict": guard_predict, "vault": guard_vault_web, "refusals": guard_refusals, "mirrors": guard_mirrors, "observability": guard_observability, "scheduler": guard_scheduler}
 
 
 # ---------------------------------------------------------------- Linear + state
