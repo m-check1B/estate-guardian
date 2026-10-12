@@ -881,7 +881,10 @@ def guard_predict():
         if old:
             slope = (pct - old[0][1]) / ((NOW - old[0][0]) / 86400)
             days = (95 - pct) / slope if slope > 0 else None
-        st = "RED" if days is not None and days < 5 else "AMBER" if days is not None and days < 14 else "GREEN"
+        # 12 Oct: model downloads (~110 GB in 1 h, then ~35 GB) are steps, not a steady rate; extrapolating them gave a
+        # false P0 at 67 % with 522 GB free. RED only when it is close in time AND space; otherwise warn early.
+        st = ("RED" if days is not None and (days < 2 or (days < 5 and pct >= 85)) else
+              "AMBER" if days is not None and days < 14 else "GREEN")
         rows.append(("disk-days-to-full", host, f"{pct:.0f}%, " + (f"{days:.1f} days to 95%" if days else "no growth trend yet"), st))
         if st != "GREEN":
             out.append(F(f"risk-disk-{host}", "guardian", f"{host} disk reaches 95% in {days:.1f} days (now {pct:.0f}%)",
