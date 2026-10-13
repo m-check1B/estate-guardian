@@ -179,5 +179,32 @@ def today_counts():
     return c
 
 
+CAPS_FILE = os.environ.get("ESTATE_CAPABILITIES") or next(
+    (p for p in (f"{ART}/capabilities.json",) if os.path.exists(p)), os.path.join(HERE, "capabilities.example.json"))
+
+
+def capability(name, host=None):
+    """Which worker, on which machine, reaches <name> (Founder 13 Oct: Agent Jack Bots only need to know where and through
+    which worker to go). Picks the first usable lab from the capability's list (labs.json switch x readiness)."""
+    caps = json.load(open(CAPS_FILE)).get("capabilities", {})
+    if name not in caps:
+        return {"capability": name, "blocked": True, "reason": f"unknown capability; known: {', '.join(sorted(caps))}"}
+    c = caps[name]
+    host = host or c.get("host", "jupiter")
+    policy, usable = lab_state(host)
+    pick = next((l for l in c.get("labs", []) if l in usable), None)
+    if not pick:
+        return {"capability": name, "host": host, "blocked": True,
+                "reason": f"no usable lab among {c.get('labs')} on {host}", "how": c.get("how"), "ref": c.get("ref")}
+    return {"capability": name, "lab": policy[pick]["hire"], "model_lab": pick, "vendor": policy[pick]["vendor"],
+            "host": host, "how": c.get("how"), "ref": c.get("ref"),
+            "hire": f"HIRE_HOST={host} ~/Developer-artifacts/bin/hire.sh {policy[pick]['hire']} <BRIEF>.md \"<title>\""}
+
+
 if __name__ == "__main__":
-    print(json.dumps(route(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else ""), ensure_ascii=False))
+    if len(sys.argv) > 2 and sys.argv[1] == "--capability":
+        print(json.dumps(capability(sys.argv[2]), ensure_ascii=False))
+    elif len(sys.argv) > 1 and sys.argv[1] == "--capabilities":
+        print(json.dumps(sorted(json.load(open(CAPS_FILE)).get("capabilities", {})), ensure_ascii=False))
+    else:
+        print(json.dumps(route(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else ""), ensure_ascii=False))

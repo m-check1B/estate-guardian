@@ -1,0 +1,141 @@
+{
+ "_doc": "Capability map for the multi-lab router (Founder 13 Oct: Agent Jack Bots only need to know which worker, on which machine, reaches what). worker_route.py --capability <name> picks the first usable lab (labs.json switches x readiness) and returns lab, host and how. Facts, not secrets: never put tokens here.",
+ "capabilities": {
+  "clickup.advertes": {
+   "labs": [
+    "opus",
+    "sonnet"
+   ],
+   "host": "pro",
+   "how": "Claude ClickUp connector, logged in as <account>, workspace <account>. Internal tasks are OK; nothing outward without 'pošli'.",
+   "ref": "an internal ticket"
+  },
+  "clickup.verduona": {
+   "labs": [
+    "luna-medium",
+    "luna"
+   ],
+   "host": "pro",
+   "how": "Codex MCP clickup-verduona (<account>), workspace <account>. Docs: append, never replace.",
+   "ref": "an internal ticket"
+  },
+  "linear": {
+   "labs": [
+    "sonnet",
+    "luna-medium",
+    "opus",
+    "luna"
+   ],
+   "host": "jupiter",
+   "how": "Linear API/MCP, team KRA. Comments and issues are OK; never delete.",
+   "ref": ""
+  },
+  "gmail.read_draft": {
+   "labs": [
+    "opus",
+    "sonnet"
+   ],
+   "host": "pro",
+   "how": "Claude Gmail connector (<account>). Read and draft only; sending needs the Founder's 'pošli'. Sign as 'Agent Jack'.",
+   "ref": "no-emails-without-ok"
+  },
+  "calendar": {
+   "labs": [
+    "opus",
+    "sonnet"
+   ],
+   "host": "pro",
+   "how": "Claude Google Calendar connector; Advertes calendar <account> is shared to <account>.",
+   "ref": ""
+  },
+  "chrome.founder": {
+   "labs": [
+    "opus"
+   ],
+   "host": "pro",
+   "how": "Claude in Chrome extension in the Founder's real Chrome (signed in: X <account>, ClickUp, Google). Worker browsers are signed out. Publishing needs a Linear ticket with the Founder's instruction.",
+   "ref": "x-publishing-path"
+  },
+  "browser.worker": {
+   "labs": [
+    "luna",
+    "cursor"
+   ],
+   "host": "pro",
+   "how": "Clicker lane: UI proof, click-through E2E, screenshots, in the worker's own browser (not the Founder's sessions).",
+   "ref": ""
+  },
+  "vault.credentials": {
+   "labs": [
+    "luna"
+   ],
+   "host": "pro",
+   "how": "Vault brief run through ~/bin/nasvault on the Pro. Never print values; 2FA goes to the Founder; new console credentials go through the plan gate.",
+   "ref": "agent-vault-credentials"
+  },
+  "code.repo": {
+   "labs": [
+    "sonnet",
+    "luna-medium",
+    "opus",
+    "cursor"
+   ],
+   "host": "jupiter",
+   "how": "All dev runs on Jupiter dev-workers. PRs go only to Forgejo via AGit; never GitHub.",
+   "ref": "builds-only-on-jupiter"
+  },
+  "production.change": {
+   "labs": [
+    "opus"
+   ],
+   "host": "jupiter",
+   "how": "Never directly: route to Senior / Release Captain (production lock, reviewed restart). Brief the change and its proof.",
+   "ref": "an internal ticket"
+  },
+  "gbrain": {
+   "labs": [
+    "opus",
+    "sonnet",
+    "luna"
+   ],
+   "host": "jupiter",
+   "how": "gbrain MCP (shared code and docs index; read-only for workers). Agent Jack's business gbrain is the Jack module.",
+   "ref": "an internal ticket"
+  },
+  "grafana.estate": {
+   "labs": [
+    "sonnet",
+    "luna-medium"
+   ],
+   "host": "pro",
+   "how": "Estate Grafana on the tailnet (anonymous viewer); GUARDIAN's observability guard reads the same signals.",
+   "ref": "an internal ticket"
+  },
+  "gemini.video": {
+   "labs": [
+    "opus",
+    "sonnet"
+   ],
+   "host": "pro",
+   "how": "~/Developer-artifacts/bin/agy-flash (latest Gemini Flash only; never agy --model).",
+   "ref": "video-critic-antigravity"
+  },
+  "gpu.jupiter": {
+   "labs": [
+    "sonnet",
+    "luna-medium"
+   ],
+   "host": "jupiter",
+   "how": "Jupiter R9700 GPU (ComfyUI venv under ~/lab); downloads go to /models, not ~/lab.",
+   "ref": "gpu-local-first"
+  },
+  "x.publish": {
+   "labs": [
+    "opus"
+   ],
+   "host": "pro",
+   "how": "Same as chrome.founder plus the publications library flow (Forgejo matej/publications, file → Linear ticket → post → move to articles/).",
+   "ref": "publications-library"
+  }
+ }
+}

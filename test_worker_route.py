@@ -121,6 +121,20 @@ class Router(unittest.TestCase):
         self.usage = {"claude": {"usedPercent": 95}}
         self.assertNotEqual(self.route("Fix the lint.", "BRIEF-lint.md")["vendor"], "anthropic")
 
+    def test_capability_routes_to_first_usable_lab(self):
+        wr = self.wr
+        wr.LABS_FILE = self.path("labs.json", self.labs)
+        wr.READINESS = self.path("ready.json", self.ready)
+        wr.CAPS_FILE = os.path.join(HERE, "capabilities.example.json")
+        d = wr.capability("clickup.advertes")
+        self.assertEqual((d["model_lab"], d["host"]), ("opus", "pro"))
+        self.assertIn("hire.sh claude", d["hire"])
+        self.off("opus", "founder")
+        self.assertEqual(wr.capability("clickup.advertes")["model_lab"], "sonnet")
+        self.off("luna", "founder")
+        self.assertTrue(wr.capability("vault.credentials")["blocked"])  # vault never falls back off Luna
+        self.assertTrue(wr.capability("no.such.thing")["blocked"])
+
     def test_shipped_example_is_valid(self):
         labs = self.labs["labs"]
         for k, v in labs.items():
