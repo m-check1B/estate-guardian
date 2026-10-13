@@ -1,5 +1,5 @@
 {
- "_doc": "Capability map for the multi-lab router (Founder 13 Oct: Agent Jack Bots only need to know which worker, on which machine, reaches what). worker_route.py --capability <name> picks the first usable lab (labs.json switches x readiness) and returns lab, host and how. Facts, not secrets: never put tokens here.",
+ "_doc": "Capability map for the multi-lab router (Founder 13 Oct: Agent Jack Bots only need to know which worker, on which machine, reaches what). worker_route.py --capability <name> picks the first usable lab (labs.json switches x readiness) and returns lab, host and how. Facts, not secrets: never put tokens here. Capabilities marked restricted never get a ready-to-run hire line: they go only through the Founder-approved path (brief, plan gate or #refusal, Linear ticket).",
  "capabilities": {
   "clickup.advertes": {
    "labs": [
@@ -54,7 +54,8 @@
    ],
    "host": "pro",
    "how": "Claude in Chrome extension in the Founder's real Chrome (signed in: X <account>, ClickUp, Google). Worker browsers are signed out. Publishing needs a Linear ticket with the Founder's instruction.",
-   "ref": "x-publishing-path"
+   "ref": "x-publishing-path",
+   "restricted": true
   },
   "browser.worker": {
    "labs": [
@@ -71,7 +72,8 @@
    ],
    "host": "pro",
    "how": "Vault brief run through ~/bin/nasvault on the Pro. Never print values; 2FA goes to the Founder; new console credentials go through the plan gate.",
-   "ref": "agent-vault-credentials"
+   "ref": "agent-vault-credentials",
+   "restricted": true
   },
   "code.repo": {
    "labs": [
@@ -90,7 +92,8 @@
    ],
    "host": "jupiter",
    "how": "Never directly: route to Senior / Release Captain (production lock, reviewed restart). Brief the change and its proof.",
-   "ref": "an internal ticket"
+   "ref": "an internal ticket",
+   "restricted": true
   },
   "gbrain": {
    "labs": [
@@ -135,7 +138,8 @@
    ],
    "host": "pro",
    "how": "Same as chrome.founder plus the publications library flow (Forgejo matej/publications, file → Linear ticket → post → move to articles/).",
-   "ref": "publications-library"
+   "ref": "publications-library",
+   "restricted": true
   }
  }
 }

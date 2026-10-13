@@ -196,9 +196,14 @@ def capability(name, host=None):
     if not pick:
         return {"capability": name, "host": host, "blocked": True,
                 "reason": f"no usable lab among {c.get('labs')} on {host}", "how": c.get("how"), "ref": c.get("ref")}
-    return {"capability": name, "lab": policy[pick]["hire"], "model_lab": pick, "vendor": policy[pick]["vendor"],
-            "host": host, "how": c.get("how"), "ref": c.get("ref"),
-            "hire": f"HIRE_HOST={host} ~/Developer-artifacts/bin/hire.sh {policy[pick]['hire']} <BRIEF>.md \"<title>\""}
+    out = {"capability": name, "lab": policy[pick]["hire"], "model_lab": pick, "vendor": policy[pick]["vendor"],
+           "host": host, "how": c.get("how"), "ref": c.get("ref")}
+    if c.get("restricted"):  # vault, production, the Founder's Chrome, public posting: never a ready-to-run line
+        out["hire"] = None
+        out["path"] = "Founder-approved path only: write the brief (plan gate / Linear ticket / #refusal as the 'how' says)"
+    else:
+        out["hire"] = f"HIRE_HOST={host} ~/Developer-artifacts/bin/hire.sh {policy[pick]['hire']} <BRIEF>.md \"<title>\""
+    return out
 
 
 if __name__ == "__main__":
