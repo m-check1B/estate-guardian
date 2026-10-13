@@ -1578,8 +1578,47 @@ def guard_t3host():
     return out
 
 
+# ---------------------------------------------------------------- guard: plan usage early warning
+# 13 Oct: CodexBar showed Claude would not last to the reset at 09:21, and the router switched opus/sonnet/haiku OFF,
+# but no line was told. Their own Claude sessions then stopped ~12:45-23:00 (Syfon: a 10.5 h gap). Warn while there is
+# still time to move urgent work to another lab, and publish one availability file every line's pulse can read.
+AVAILABILITY_MD = f"{ART}/estate/MODEL-AVAILABILITY.md"
+
+
+def guard_usage():
+    out = []
+    try:
+        snap = json.load(open(USAGE_SNAPSHOT))
+        labs = json.load(open(LABS_FILE))["labs"]
+    except Exception:
+        return out
+    rows = []
+    for prov, names in USAGE_PROVIDERS.items():
+        x = snap.get(prov)
+        if not x:
+            continue
+        on = [n for n in names if labs.get(n, {}).get("switch") == "ON"]
+        state = "OFF" if not on else ("WARN" if x["usedPercent"] >= 80 or not x.get("lastsToReset", True) else "OK")
+        rows.append(f"| {prov} | {x['usedPercent']}% ({x['window']}) | {'yes' if x.get('lastsToReset', True) else 'NO'} "
+                    f"| {x.get('resetsAt') or '?'} | {state} | {', '.join(on) or '—'} |")
+        if prov == "claude" and state != "OK":
+            out.append(F("usage-claude", "guardian",
+                         f"Claude plan {x['usedPercent']}% used, {'OFF' if state == 'OFF' else 'will not last'} to reset {x.get('resetsAt')}",
+                         "Every Claude Desktop thread and Claude seat stops when the plan runs out (13 Oct: 10.5 h gap). "
+                         "Lines move urgent work to Luna seats now; see estate/MODEL-AVAILABILITY.md.",
+                         grace=0, p0=state == "OFF"))
+    if "--dry-run" not in sys.argv:
+        tmp = AVAILABILITY_MD + ".new"
+        open(tmp, "w").write(
+            f"# Model availability (GUARDIAN, {stamp()})\n\nRead this in every pulse. WARN = move urgent work to a lab that is OK; "
+            "OFF = the router no longer hires it. Claude WARN/OFF also means Claude Desktop threads may stop.\n\n"
+            "| plan | used | lasts to reset | resets (UTC) | state | labs ON |\n|---|---|---|---|---|---|\n" + "\n".join(rows) + "\n")
+        os.replace(tmp, AVAILABILITY_MD)
+    return out
+
+
 GUARDS = {"ci": guard_ci, "handoffs": guard_handoffs, "lines": guard_lines, "hosts": guard_hosts, "prod": guard_prod,
-          "predict": guard_predict, "vault": guard_vault_web, "refusals": guard_refusals, "mirrors": guard_mirrors, "observability": guard_observability, "scheduler": guard_scheduler, "results": guard_results, "antigravity": guard_antigravity, "layout": guard_layout, "t3host": guard_t3host}
+          "predict": guard_predict, "vault": guard_vault_web, "refusals": guard_refusals, "mirrors": guard_mirrors, "observability": guard_observability, "scheduler": guard_scheduler, "results": guard_results, "antigravity": guard_antigravity, "layout": guard_layout, "t3host": guard_t3host, "usage": guard_usage}
 
 
 # ---------------------------------------------------------------- Linear + state
