@@ -358,6 +358,34 @@ from projection_threads t join projection_thread_sessions s on s.thread_id=t.thr
 where t.archived_at is null and t.title not like 'GUARDIAN%' and (s.status in ('error','running')) and s.updated_at > strftime('%Y-%m-%dT%H:%M:%fZ','now','-12 hours');
 """
 
+# 13 Oct: a lab out of plan does not error the session. The turn "completes" with one short reply ("Upgrade your plan to
+# continue"), and owners archive the seat, so SEAT_SQL never saw it and Cursor stayed ON. Short final replies that match
+# USAGE_RE count as usage errors for the auto-switch (archived seats included).
+PLAN_SQL = """
+select substr(t.thread_id,1,8), replace(substr(t.title,1,50),'|','/'), 'error', coalesce(s.provider_name,''),
+  replace(replace(substr(m.text,1,220),char(10),' '),'|','/'), m.created_at, m.created_at,
+  coalesce(json_extract(t.model_selection_json,'$.model'),'')
+from projection_threads t join projection_thread_sessions s on s.thread_id=t.thread_id
+join projection_thread_messages m on m.thread_id=t.thread_id and m.role='assistant'
+where m.created_at > strftime('%Y-%m-%dT%H:%M:%fZ','now','-3 hours') and length(m.text) < 200
+  and (lower(m.text) like '%upgrade your plan%' or lower(m.text) like '%hit your usage limit%'
+       or lower(m.text) like '%out of credits%');
+"""
+
+
+def plan_refusal_rows():
+    rows = []
+    try:
+        con = sqlite3.connect(f"file:{HOME}/.t3/userdata/state.sqlite?mode=ro", uri=True, timeout=5)
+        rows += [("pro",) + tuple(str(x) for x in r) for r in con.execute(PLAN_SQL)]
+    except Exception:
+        pass
+    for host, label, bin_ in ((DEV_WORKERS, "jup", "sqlite3"), (IOS_MINI, "mini", "/usr/bin/sqlite3")):
+        rc, txt, _ = sh(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", host,
+                         f"{bin_} -readonly ~/.t3/userdata/state.sqlite"], inp=PLAN_SQL, t=30)
+        rows += [(label,) + tuple(l.split("|")) for l in txt.splitlines() if len(l.split("|")) == 8]
+    return rows
+
 
 def seat_rows():
     rows = []
@@ -395,7 +423,7 @@ def expected_out(err):
 LABS_FILE = f"{ART}/guardian/labs.json"
 LAB_CHANGES = f"{ART}/guardian/lab-changes.jsonl"
 USAGE_RE = re.compile(r"\b402\b|payment required|usage balance|quota|rate.?limit|\b429\b|insufficient|exceeded|"
-                      r"not supported when using|usage limit", re.I)
+                      r"not supported when using|usage limit|upgrade your plan|out of credits", re.I)
 
 
 def lab_usage_switch(errs):
@@ -590,7 +618,7 @@ def guard_lines():
     except FileNotFoundError:
         pass
     rows = seat_rows()
-    lab_usage_switch([r for r in rows if r[3] == "error" and (iso_age_min(r[6]) or 0) < 180])
+    lab_usage_switch([r for r in rows if r[3] == "error" and (iso_age_min(r[6]) or 0) < 180] + plan_refusal_rows())
     errs = [r for r in rows if r[3] == "error" and (iso_age_min(r[6]) or 0) < 180 and not expected_out(r[5])]
     sigs = {}
     for r in errs:
