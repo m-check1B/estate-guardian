@@ -1491,8 +1491,67 @@ def guard_layout():
               + "\n".join(f"- {x}" for x in dups), grace=0, amber=True)]
 
 
+# ---------------------------------------------------------------- guard: T3 seat host (dev-workers)
+# 13 Oct 09:02: ~10 parallel seats pushed the t3code cgroup to 12.6 GB on the 15 GB VM; the OOM killer took t3code,
+# systemd restarted it, and 14 seats ended "Provider session did not survive a server restart" with nobody told.
+# Warn before the limit (seat count + t3code memory), and after any restart list the lost seats for their owners.
+T3_SEAT_CAP = int(CFG.get("t3_seat_cap", 6))
+T3_PROBE = r'''
+awk '/MemTotal/{print "mem_total_kb="$2} /MemAvailable/{print "mem_avail_kb="$2}' /proc/meminfo
+systemctl --user show t3code -p MemoryCurrent -p NRestarts -p ActiveEnterTimestamp 2>/dev/null
+echo "oom_t3=$(journalctl --user --since '-30min' 2>/dev/null | grep -c 't3code.service: A process of this unit has been killed by the OOM')"
+python3 - <<'EOF'
+import sqlite3, os, json
+try:
+    c = sqlite3.connect("file:" + os.path.expanduser("~/.t3/userdata/state.sqlite") + "?mode=ro", uri=True)
+    print("seats_running=%d" % c.execute("select count(*) from projection_thread_sessions where status='running'").fetchone()[0])
+    lost = c.execute("select s.thread_id, t.title, s.updated_at from projection_thread_sessions s join projection_threads t using(thread_id) "
+                     "where s.status='error' and s.last_error like '%did not survive a server restart%' "
+                     "and t.archived_at is null and t.deleted_at is null and s.updated_at > strftime('%Y-%m-%dT%H:%M', 'now', '-6 hours')").fetchall()
+    print("lost_json=" + json.dumps(lost))
+except Exception as e:
+    print("t3db_error=" + type(e).__name__)
+EOF
+'''
+
+
+def guard_t3host():
+    out = []
+    rc, txt, err = ssh(DEV_WORKERS, T3_PROBE, t=30)
+    d = kv(txt)
+    if not d.get("mem_total_kb"):
+        return out  # unreachability is guard_hosts' job
+    total = int(d["mem_total_kb"]) * 1024
+    avail = int(d.get("mem_avail_kb", "0") or 0) / 1048576
+    t3mem = int(d.get("MemoryCurrent", "0") or 0) if d.get("MemoryCurrent", "").isdigit() else 0
+    seats = int(d.get("seats_running", "0") or 0)
+    share = t3mem / total if total else 0
+    if int(d.get("oom_t3", "0") or 0):
+        out.append(F("t3-oom", "guardian", "dev-workers: the OOM killer hit t3code in the last 30 min",
+                     "Every running seat is lost on the restart. Cap seats (t3_seat_cap), move extras to the Pro/mini.",
+                     grace=0, p0=True))
+    elif share >= 0.7 or avail < 3 or seats > T3_SEAT_CAP:
+        out.append(F("t3-pressure", "senior",
+                     f"dev-workers seat pressure: {seats} seats running (cap {T3_SEAT_CAP}), t3code {t3mem / 2**30:.1f} GiB "
+                     f"= {share:.0%} of RAM, {avail:.1f} GiB available",
+                     "13 Oct 09:02 the OOM killer took t3code at ~80% and every seat died. Queue new hires or send "
+                     "them to the Pro/mini until this clears.", grace=5, p0=share >= 0.8 or avail < 1.5))
+    try:
+        lost = json.loads(d.get("lost_json", "[]"))
+    except ValueError:
+        lost = []
+    if lost:
+        restarted = d.get("ActiveEnterTimestamp", "?")
+        rows = "\n".join(f"- {tid[:8]} {title} (errored {at[11:16]}Z)" for tid, title, at in lost)
+        out.append(F("t3-restart-lost-seats", "guardian",
+                     f"t3code restarted ({restarted}, NRestarts={d.get('NRestarts', '?')}): {len(lost)} seats lost their session",
+                     "Owners: re-send 'continue' to the seats that were not finished (tentacles act thread.continue), "
+                     "or archive the ones that were. Seats:\n" + rows, grace=0, amber=True))
+    return out
+
+
 GUARDS = {"ci": guard_ci, "handoffs": guard_handoffs, "lines": guard_lines, "hosts": guard_hosts, "prod": guard_prod,
-          "predict": guard_predict, "vault": guard_vault_web, "refusals": guard_refusals, "mirrors": guard_mirrors, "observability": guard_observability, "scheduler": guard_scheduler, "results": guard_results, "antigravity": guard_antigravity, "layout": guard_layout}
+          "predict": guard_predict, "vault": guard_vault_web, "refusals": guard_refusals, "mirrors": guard_mirrors, "observability": guard_observability, "scheduler": guard_scheduler, "results": guard_results, "antigravity": guard_antigravity, "layout": guard_layout, "t3host": guard_t3host}
 
 
 # ---------------------------------------------------------------- Linear + state

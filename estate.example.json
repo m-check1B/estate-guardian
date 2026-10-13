@@ -1,262 +1,263 @@
 {
- "linear": {
-  "key_item": "com.example.linear.mirror-watch",
-  "team_key": "KRA",
-  "labels": {
-   "infra": "00000000-0000-0000-0000-000000000000",
-   "senior": "00000000-0000-0000-0000-000000000000",
-   "syfon": "00000000-0000-0000-0000-000000000000",
-   "trznice": "00000000-0000-0000-0000-000000000000",
-   "advertes": "00000000-0000-0000-0000-000000000000",
-   "councilnow": "00000000-0000-0000-0000-000000000000",
-   "bozp": "00000000-0000-0000-0000-000000000000"
+  "linear": {
+    "key_item": "com.example.linear.mirror-watch",
+    "team_key": "KRA",
+    "labels": {
+      "infra": "00000000-0000-0000-0000-000000000000",
+      "senior": "00000000-0000-0000-0000-000000000000",
+      "syfon": "00000000-0000-0000-0000-000000000000",
+      "trznice": "00000000-0000-0000-0000-000000000000",
+      "advertes": "00000000-0000-0000-0000-000000000000",
+      "councilnow": "00000000-0000-0000-0000-000000000000",
+      "bozp": "00000000-0000-0000-0000-000000000000"
+    },
+    "owner_labels": {
+      "guardian": [
+        "infra"
+      ],
+      "senior": [
+        "senior",
+        "infra"
+      ],
+      "captain": [
+        "senior"
+      ],
+      "syfon": [
+        "syfon"
+      ],
+      "trznice": [
+        "trznice"
+      ],
+      "advertes": [
+        "advertes"
+      ],
+      "councilnow": [
+        "councilnow"
+      ],
+      "bezpecnost": [
+        "bozp"
+      ],
+      "flagship": [
+        "advertes"
+      ]
+    }
   },
-  "owner_labels": {
-   "guardian": [
-    "infra"
-   ],
-   "senior": [
-    "senior",
-    "infra"
-   ],
-   "captain": [
-    "senior"
-   ],
-   "syfon": [
-    "syfon"
-   ],
-   "trznice": [
-    "trznice"
-   ],
-   "advertes": [
-    "advertes"
-   ],
-   "councilnow": [
-    "councilnow"
-   ],
-   "bezpecnost": [
-    "bozp"
-   ],
-   "flagship": [
-    "advertes"
-   ]
-  }
- },
- "repo_owner": {
-  "agent-jack-3": "senior",
-  "kraliki-sphere": "senior",
-  "t3-code-tentacles": "senior",
-  "advisory-council-app": "councilnow",
-  "bozp": "bezpecnost",
-  "syfon": "syfon",
-  "jack-work-exchange": "trznice",
-  "sims": "flagship"
- },
- "hosts": {
-  "jupiter": "user@203.0.113.10",
-  "dev_workers": "user@203.0.113.10",
-  "production": "user@203.0.113.10",
-  "nas": "user@203.0.113.10",
-  "ios_mini": "user@203.0.113.10"
- },
- "forgejo_api": "http://203.0.113.10:3000/api/v1",
- "forgejo_owner": "owner",
- "expected_runners": {
-  "13": "ci-runner-release",
-  "14": "ci-contract-firewall-desktop",
-  "16": "jupiter-councilnow-ci",
-  "17": "jupiter-bozp-ci",
-  "18": "jupiter-sphere-ci",
-  "19": "jupiter-linear-bridge-ci",
-  "20": "ci-runner-x64",
-  "21": "ci-runner-overflow"
- },
- "windows_runner": {
-  "id": 22,
-  "name": "win11-dev-windows",
-  "guest": "win11-dev"
- },
- "runner_scope_repos": [
-  "agent-jack-3",
-  "advisory-council-app",
-  "bozp",
-  "kraliki-sphere",
-  "linear-agent-bridge"
- ],
- "ci_repos": [
-  "agent-jack-3",
-  "kraliki-sphere",
-  "advisory-council-app",
-  "bozp",
-  "syfon",
-  "jack-work-exchange",
-  "linear-agent-bridge",
-  "t3-code-tentacles",
-  "sims"
- ],
- "ci_vms": {
-  "ci-runner": {
-   "daemons": 3,
-   "containers": [],
-   "bridges": [
-    "docker0"
-   ]
+  "repo_owner": {
+    "agent-jack-3": "senior",
+    "kraliki-sphere": "senior",
+    "t3-code-tentacles": "senior",
+    "advisory-council-app": "councilnow",
+    "bozp": "bezpecnost",
+    "syfon": "syfon",
+    "jack-work-exchange": "trznice",
+    "sims": "flagship"
   },
-  "ci-green-contract": {
-   "daemons": 1,
-   "containers": [],
-   "bridges": []
+  "hosts": {
+    "jupiter": "user@203.0.113.10",
+    "dev_workers": "user@203.0.113.10",
+    "production": "user@203.0.113.10",
+    "nas": "user@203.0.113.10",
+    "ios_mini": "user@203.0.113.10"
   },
-  "ci-councilnow-bozp": {
-   "daemons": 0,
-   "containers": [
-    "jupiter-sphere-ci",
-    "jupiter-bozp-ci",
-    "jupiter-councilnow-ci",
-    "jupiter-linear-bridge-ci"
-   ],
-   "bridges": [
-    "docker0",
-    "sphere0"
-   ]
-  }
- },
- "always_running_guests": [
-  "ci-runner",
-  "ci-green-contract",
-  "ci-councilnow-bozp",
-  "dev-workers",
-  "staging",
-  "backup-recv",
-  "twenty-crm"
- ],
- "heartbeats": [
-  [
-   "PULSE-HEARTBEAT",
-   "senior",
-   30
-  ],
-  [
-   "ADVERTES-PULSE-HEARTBEAT",
-   "advertes",
-   45
-  ],
-  [
-   "SYFON-PULSE-HEARTBEAT",
-   "syfon",
-   80
-  ],
-  [
-   "TRZNICE-PULSE-HEARTBEAT",
-   "trznice",
-   80
-  ],
-  [
-   "FLAGSHIP-PULSE-HEARTBEAT",
-   "flagship",
-   120,
-   true
-  ],
-  [
-   "COUNCILNOW-PULSE-HEARTBEAT",
-   "councilnow",
-   80,
-   true
-  ],
-  [
-   "BEZPECNOST-PRACE-PULSE-HEARTBEAT",
-   "bezpecnost",
-   80,
-   true
-  ],
-  [
-   "GUARDIAN-PULSE-HEARTBEAT",
-   "guardian",
-   70
-  ]
- ],
- "endpoints": [
-  [
-   "Agent Jack",
-   "https://agentjack.kraliki.com/health/ready",
-   "senior",
-   ""
-  ],
-  [
-   "Bezpecnost prace",
-   "https://app.bozp.verduona.com/api/bozp/health",
-   "bezpecnost",
-   ""
-  ],
-  [
-   "CouncilNow",
-   "https://councilnow.com/health",
-   "councilnow",
-   ""
-  ],
-  [
-   "Shop",
-   "https://shop.verduona.com/",
-   "senior",
-   ""
-  ],
-  [
-   "Sphere",
-   "https://agentjack.kraliki.com/sphere/health",
-   "senior",
-   "\"status\":\"ok\""
-  ],
-  [
-   "Identity (Zitadel)",
-   "https://identity.verduona.dev/.well-known/openid-configuration",
-   "senior",
-   "issuer"
-  ]
- ],
- "production": {
-  "edge_config_dir": "/home/appuser/github/infra/compose/traefik-dynamic",
-  "critical_ports": {
-   "3017": [
-    "Bezpe\u010dnost pr\u00e1ce backend",
-    "bezpecnost"
-   ],
-   "3018": [
-    "Bezpe\u010dnost pr\u00e1ce gateway",
-    "bezpecnost"
-   ],
-   "3019": [
-    "Bezpe\u010dnost pr\u00e1ce frontend",
-    "bezpecnost"
-   ],
-   "8000": [
-    "Sphere API",
-    "senior"
-   ]
+  "forgejo_api": "http://203.0.113.10:3000/api/v1",
+  "forgejo_owner": "owner",
+  "expected_runners": {
+    "13": "ci-runner-release",
+    "14": "ci-contract-firewall-desktop",
+    "16": "jupiter-councilnow-ci",
+    "17": "jupiter-bozp-ci",
+    "18": "jupiter-sphere-ci",
+    "19": "jupiter-linear-bridge-ci",
+    "20": "ci-runner-x64",
+    "21": "ci-runner-overflow"
   },
-  "custody_dir": "~/sphere-custody/evidence"
- },
- "probes": {
-  "ip_pin": "\nfor c in $(lxc exec ci-runner -- docker ps --format '{{.Names}}' | grep -v FORGEJO-ACTIONS); do\n  lxc exec ci-runner -- docker exec $c sh -c \"grep -lE '192\\\\.168\\\\.0\\\\.20([^0-9]|\\$)' /data/config.yml /data/.runner 2>/dev/null\" | sed \"s|^|ci-runner/$c:|\"; done\nlxc exec ci-green-contract -- sh -c \"grep -lE '192\\\\.168\\\\.0\\\\.20([^0-9]|\\$)' /srv/jack-ci/host/config.yml /srv/jack-ci/host/.runner 2>/dev/null\" | sed 's|^|ci-green-contract:|'\nfor c in jupiter-sphere-ci jupiter-bozp-ci jupiter-councilnow-ci jupiter-linear-bridge-ci; do\n  lxc exec ci-councilnow-bozp -- docker exec $c sh -c \"grep -lE '192\\\\.168\\\\.0\\\\.20([^0-9]|\\$)' /data/config.yml /data/.runner 2>/dev/null\" | sed \"s|^|ci-councilnow-bozp/$c:|\"; done\n",
-  "apt_pending": "\napt list --upgradable 2>/dev/null | grep -E '^(docker|containerd|runc)' | cut -d/ -f1 | sed 's/^/jupiter:/'\nsnap refresh --list 2>/dev/null | awk 'NR>1 && $1==\"lxd\"{print \"jupiter:snap-lxd\"}'\nfor g in ci-runner ci-green-contract ci-councilnow-bozp; do\n  lxc exec $g -- sh -c \"apt list --upgradable 2>/dev/null | grep -E '^(docker|containerd|runc)' | cut -d/ -f1\" | sed \"s/^/$g:/\"; done\n"
- },
- "dead_ip": "203.0.113.10",
- "vault_url_re": "(nas[a-z0-9.-]*|192\\.168\\.0\\.21|100\\.82\\.130\\.7):9443",
- "codex_pulse_label": "com.example.codex-refusal-pulse",
- "claude_projects_dir": "~/.claude/projects/-Users-me-github",
- "jev_keychain_items": [
-  "com.example.typesafe.guardian",
-  "example/typesafe-key"
- ],
- "_doc": "Copy to ~/Developer-artifacts/guardian/estate.local.json (outside the repo) and fill in your estate. Never commit the real file.",
- "grafana": {
-  "url": "http://<grafana-host>:3000",
-  "prometheus_uid": "<prometheus datasource uid>"
- },
- "scheduled_tasks": {
-  "<task-id>": 30
- },
- "claude_sessions_dir": "~/Library/Application Support/Claude/claude-code-sessions",
- "paused_lines": {
-  "<owner>": "<why, who paused it>"
- }
+  "windows_runner": {
+    "id": 22,
+    "name": "win11-dev-windows",
+    "guest": "win11-dev"
+  },
+  "runner_scope_repos": [
+    "agent-jack-3",
+    "advisory-council-app",
+    "bozp",
+    "kraliki-sphere",
+    "linear-agent-bridge"
+  ],
+  "ci_repos": [
+    "agent-jack-3",
+    "kraliki-sphere",
+    "advisory-council-app",
+    "bozp",
+    "syfon",
+    "jack-work-exchange",
+    "linear-agent-bridge",
+    "t3-code-tentacles",
+    "sims"
+  ],
+  "ci_vms": {
+    "ci-runner": {
+      "daemons": 3,
+      "containers": [],
+      "bridges": [
+        "docker0"
+      ]
+    },
+    "ci-green-contract": {
+      "daemons": 1,
+      "containers": [],
+      "bridges": []
+    },
+    "ci-councilnow-bozp": {
+      "daemons": 0,
+      "containers": [
+        "jupiter-sphere-ci",
+        "jupiter-bozp-ci",
+        "jupiter-councilnow-ci",
+        "jupiter-linear-bridge-ci"
+      ],
+      "bridges": [
+        "docker0",
+        "sphere0"
+      ]
+    }
+  },
+  "always_running_guests": [
+    "ci-runner",
+    "ci-green-contract",
+    "ci-councilnow-bozp",
+    "dev-workers",
+    "staging",
+    "backup-recv",
+    "twenty-crm"
+  ],
+  "heartbeats": [
+    [
+      "PULSE-HEARTBEAT",
+      "senior",
+      30
+    ],
+    [
+      "ADVERTES-PULSE-HEARTBEAT",
+      "advertes",
+      45
+    ],
+    [
+      "SYFON-PULSE-HEARTBEAT",
+      "syfon",
+      80
+    ],
+    [
+      "TRZNICE-PULSE-HEARTBEAT",
+      "trznice",
+      80
+    ],
+    [
+      "FLAGSHIP-PULSE-HEARTBEAT",
+      "flagship",
+      120,
+      true
+    ],
+    [
+      "COUNCILNOW-PULSE-HEARTBEAT",
+      "councilnow",
+      80,
+      true
+    ],
+    [
+      "BEZPECNOST-PRACE-PULSE-HEARTBEAT",
+      "bezpecnost",
+      80,
+      true
+    ],
+    [
+      "GUARDIAN-PULSE-HEARTBEAT",
+      "guardian",
+      70
+    ]
+  ],
+  "endpoints": [
+    [
+      "Agent Jack",
+      "https://agentjack.kraliki.com/health/ready",
+      "senior",
+      ""
+    ],
+    [
+      "Bezpecnost prace",
+      "https://app.bozp.verduona.com/api/bozp/health",
+      "bezpecnost",
+      ""
+    ],
+    [
+      "CouncilNow",
+      "https://councilnow.com/health",
+      "councilnow",
+      ""
+    ],
+    [
+      "Shop",
+      "https://shop.verduona.com/",
+      "senior",
+      ""
+    ],
+    [
+      "Sphere",
+      "https://agentjack.kraliki.com/sphere/health",
+      "senior",
+      "\"status\":\"ok\""
+    ],
+    [
+      "Identity (Zitadel)",
+      "https://identity.verduona.dev/.well-known/openid-configuration",
+      "senior",
+      "issuer"
+    ]
+  ],
+  "production": {
+    "edge_config_dir": "/home/appuser/github/infra/compose/traefik-dynamic",
+    "critical_ports": {
+      "3017": [
+        "Bezpečnost práce backend",
+        "bezpecnost"
+      ],
+      "3018": [
+        "Bezpečnost práce gateway",
+        "bezpecnost"
+      ],
+      "3019": [
+        "Bezpečnost práce frontend",
+        "bezpecnost"
+      ],
+      "8000": [
+        "Sphere API",
+        "senior"
+      ]
+    },
+    "custody_dir": "~/sphere-custody/evidence"
+  },
+  "probes": {
+    "ip_pin": "\nfor c in $(lxc exec ci-runner -- docker ps --format '{{.Names}}' | grep -v FORGEJO-ACTIONS); do\n  lxc exec ci-runner -- docker exec $c sh -c \"grep -lE '192\\\\.168\\\\.0\\\\.20([^0-9]|\\$)' /data/config.yml /data/.runner 2>/dev/null\" | sed \"s|^|ci-runner/$c:|\"; done\nlxc exec ci-green-contract -- sh -c \"grep -lE '192\\\\.168\\\\.0\\\\.20([^0-9]|\\$)' /srv/jack-ci/host/config.yml /srv/jack-ci/host/.runner 2>/dev/null\" | sed 's|^|ci-green-contract:|'\nfor c in jupiter-sphere-ci jupiter-bozp-ci jupiter-councilnow-ci jupiter-linear-bridge-ci; do\n  lxc exec ci-councilnow-bozp -- docker exec $c sh -c \"grep -lE '192\\\\.168\\\\.0\\\\.20([^0-9]|\\$)' /data/config.yml /data/.runner 2>/dev/null\" | sed \"s|^|ci-councilnow-bozp/$c:|\"; done\n",
+    "apt_pending": "\napt list --upgradable 2>/dev/null | grep -E '^(docker|containerd|runc)' | cut -d/ -f1 | sed 's/^/jupiter:/'\nsnap refresh --list 2>/dev/null | awk 'NR>1 && $1==\"lxd\"{print \"jupiter:snap-lxd\"}'\nfor g in ci-runner ci-green-contract ci-councilnow-bozp; do\n  lxc exec $g -- sh -c \"apt list --upgradable 2>/dev/null | grep -E '^(docker|containerd|runc)' | cut -d/ -f1\" | sed \"s/^/$g:/\"; done\n"
+  },
+  "dead_ip": "203.0.113.10",
+  "vault_url_re": "(nas[a-z0-9.-]*|192\\.168\\.0\\.21|100\\.82\\.130\\.7):9443",
+  "codex_pulse_label": "com.example.codex-refusal-pulse",
+  "claude_projects_dir": "~/.claude/projects/-Users-me-github",
+  "jev_keychain_items": [
+    "com.example.typesafe.guardian",
+    "example/typesafe-key"
+  ],
+  "_doc": "Copy to ~/Developer-artifacts/guardian/estate.local.json (outside the repo) and fill in your estate. Never commit the real file.",
+  "grafana": {
+    "url": "http://<grafana-host>:3000",
+    "prometheus_uid": "<prometheus datasource uid>"
+  },
+  "scheduled_tasks": {
+    "<task-id>": 30
+  },
+  "claude_sessions_dir": "~/Library/Application Support/Claude/claude-code-sessions",
+  "paused_lines": {
+    "<owner>": "<why, who paused it>"
+  },
+  "t3_seat_cap": 6
 }
