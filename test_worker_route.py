@@ -141,6 +141,23 @@ class Router(unittest.TestCase):
         self.assertTrue(wr.capability("no.such.thing")["blocked"])
 
 
+    def test_free_text_preferences_and_admin_override(self):
+        wr = self.wr
+        wr.ADMIN_POLICY = self.path("admin.json", json.load(open(os.path.join(HERE, "admin_policy.example.json"))))
+        d = self.route("Fix the lint.", "BRIEF-lint.md")
+        p = wr.parse_preferences("prefer Claude, cheap")
+        self.assertEqual((p["prefer"], p["cost"]), (["anthropic"], "low"))
+        self.assertIn("openai", wr.parse_preferences("no OpenAI please")["avoid"])
+        self.assertIn("anthropic", wr.parse_preferences("bez claude")["avoid"])
+        d = wr.route(self.path("BRIEF-lint.md", {}) , "Fix the lint", "no OpenAI, no Cursor, no Grok, best quality")
+        self.assertEqual(d["vendor"], "anthropic")
+        self.assertEqual(d["budget"], "high")
+        v = wr.route(self.path("VAULT-BRIEF-x.md", {}), "rotate token via nasvault", "use claude")
+        self.assertEqual(v["model_lab"], "luna")  # admin-locked lane ignores preferences
+        self.assertTrue(v["preferences_overridden"])
+        json.dump({"locked_lanes": {}, "deny_vendors": [], "max_budget": "medium"}, open(wr.ADMIN_POLICY, "w"))
+        self.assertEqual(wr.route(self.path("BRIEF-inc.md", {}), "Root cause the incident", "best quality")["budget"], "medium")
+
     def test_shipped_example_is_valid(self):
         labs = self.labs["labs"]
         for k, v in labs.items():

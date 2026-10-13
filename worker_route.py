@@ -87,7 +87,36 @@ def jev_lane(text):
         return None, 0.0
 
 
-def route(path, title=""):
+VENDOR_WORDS = {"anthropic": r"anthropic|claude|opus|sonnet|haiku", "openai": r"openai|codex|gpt|luna",
+                "cursor": r"cursor|composer", "xai": r"xai|grok"}
+ADMIN_POLICY = os.environ.get("ESTATE_ADMIN_POLICY", f"{ART}/admin_policy.json")
+
+
+def parse_preferences(text):
+    """One free-text preference prompt per Agent Jack Bot instead of five dropdowns (Founder 13 Oct). Rules turn it into
+    constraints the router applies; the admin policy (admin_policy.json) overrides wrong user preferences."""
+    t = (text or "").lower()
+    p = {"avoid": set(), "prefer": [], "cost": None}
+    for v, rx in VENDOR_WORDS.items():
+        for m in re.finditer(rf"(?:no|not|avoid|never|without|bez|nechci|nepou[žz]ívat|ne)\s+(?:\w+\s+){{0,2}}?(?:{rx})", t):
+            p["avoid"].add(v)
+        if re.search(rf"(?:prefer|preferuj\w*|rad[šs]i|use|pou[žz]ij\w*|chci)\s+(?:\w+\s+){{0,2}}?(?:{rx})", t) and v not in p["avoid"]:
+            p["prefer"].append(v)
+    if re.search(r"cheap|levn|[šs]et[řr]|low cost|budget|n[íi]zk\w* cen", t):
+        p["cost"] = "low"
+    if re.search(r"best|nejlep|quality|kvalit|maximum|nejsiln|careful|pe[čc]liv", t):
+        p["cost"] = "high"
+    return p
+
+
+def admin_policy():
+    try:
+        return json.load(open(ADMIN_POLICY))
+    except Exception:  # default: the Founder rules that preferences may never break
+        return {"locked_lanes": {"vault": ["luna"], "marketing": ["opus"]}, "deny_vendors": [], "max_budget": "high"}
+
+
+def route(path, title="", preferences=""):
     text = open(path, errors="replace").read() if os.path.exists(path) else ""
     name = os.path.basename(path)
     lane, conf, score = rules(name, title, text)
@@ -100,9 +129,29 @@ def route(path, title=""):
         lane, conf, how = "judgement", conf, "default"
     host = "pro" if lane == "vault" else os.environ.get("HIRE_HOST", "jupiter")
     policy, usable = lab_state(host)
-    cands = LANES[lane]["candidates"]
+    cands = list(LANES[lane]["candidates"])
+    prefs, admin, applied, overridden = parse_preferences(preferences), admin_policy(), [], []
+    locked = admin.get("locked_lanes", {}).get(lane)
+    for v in admin.get("deny_vendors", []):
+        usable = {k: x for k, x in usable.items() if policy.get(k, {}).get("vendor") != v}
+    if locked:
+        if preferences:
+            overridden.append(f"lane {lane} is locked by the admin to {locked}; preferences ignored")
+        cands = [c for c in cands if c in locked] or cands
+    else:
+        if prefs["avoid"]:
+            left = {k: x for k, x in usable.items() if policy.get(k, {}).get("vendor") not in prefs["avoid"]}
+            if any(c in left for c in cands + sum((policy.get(c, {}).get("fallback", []) for c in cands), [])):
+                usable = left
+                applied.append(f"avoid {sorted(prefs['avoid'])}")
+            else:
+                overridden.append(f"avoid {sorted(prefs['avoid'])} would leave no usable lab for {lane}; ignored")
+        if prefs["prefer"]:
+            order = list(cands)
+            cands.sort(key=lambda c: (policy.get(c, {}).get("vendor") not in prefs["prefer"], order.index(c)))
+            applied.append(f"prefer {prefs['prefer']}")
     pick = None
-    if LANES[lane].get("spread"):
+    if LANES[lane].get("spread") and not prefs["prefer"]:
         # spread everyday work across vendors so one quota or outage never stops the estate (11 Oct Grok 402 lesson)
         on = [c for c in cands if c in usable]
         if on:
@@ -128,8 +177,17 @@ def route(path, title=""):
     budget = "high" if pick == "luna" else "medium"
     if lane in ("everyday", "judgement") and re.search(HIGH, (title + " " + text[:6000]).lower()) and hire != "cursor":
         budget = "high"
+    if prefs["cost"] and not locked:
+        want = "medium" if prefs["cost"] == "low" else "high"
+        if want != budget:
+            applied.append(f"budget {budget}->{want} ({prefs['cost']} cost preference)")
+            budget = want
+    if budget == "high" and admin.get("max_budget") == "medium":
+        overridden.append("budget capped at medium by the admin")
+        budget = "medium"
     return {"lab": hire, "model_lab": pick, "vendor": policy[pick]["vendor"], "budget": budget, "lane": lane, "how": how,
-            "confidence": round(conf, 2), "host": host, "fallback_from": fell_from, "reason": LANES[lane]["desc"], "scores": score}
+            "confidence": round(conf, 2), "host": host, "fallback_from": fell_from, "reason": LANES[lane]["desc"], "scores": score,
+            "preferences_applied": applied, "preferences_overridden": overridden}
 
 
 def lab_state(host):
@@ -212,4 +270,7 @@ if __name__ == "__main__":
     elif len(sys.argv) > 1 and sys.argv[1] == "--capabilities":
         print(json.dumps(sorted(json.load(open(CAPS_FILE)).get("capabilities", {})), ensure_ascii=False))
     else:
-        print(json.dumps(route(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else ""), ensure_ascii=False))
+        a = sys.argv[1:]
+        prefs = a[a.index("--prefs") + 1] if "--prefs" in a else ""
+        pos = [x for i, x in enumerate(a) if x != "--prefs" and (i == 0 or a[i - 1] != "--prefs")]
+        print(json.dumps(route(pos[0], pos[1] if len(pos) > 1 else "", prefs), ensure_ascii=False))

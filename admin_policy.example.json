@@ -1,0 +1,6 @@
+{
+ "_doc": "Admin override for the router (a settings FILE, not shown in any UI). It always wins over a Bot's free-text preferences. locked_lanes: lane -> the only labs allowed; deny_vendors: vendors never used; max_budget: medium|high.",
+ "locked_lanes": {"vault": ["luna"], "marketing": ["opus"]},
+ "deny_vendors": [],
+ "max_budget": "high"
+}
