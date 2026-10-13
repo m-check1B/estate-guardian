@@ -1426,8 +1426,29 @@ def guard_results():
     return out
 
 
+def agy_model_scan():
+    """Callers that pin an Antigravity model instead of using bin/agy-flash (Founder 13 Oct: latest Flash only)."""
+    roots = [os.path.expanduser(p) for p in CFG.get("agy_scan_roots", ["~/github", "~/Developer-artifacts/bin"])]
+    rc, txt, _ = sh(["grep", "-rIlE", r"[\"' ]agy[\"' ,].*--model|agy +--model", *roots, "--include=*.py", "--include=*.sh",
+                     "--include=*.mjs", "--include=*.ts", "--exclude-dir=node_modules", "--exclude-dir=.git"], t=90)
+    return sorted(l for l in txt.splitlines() if l and not l.endswith("agy-flash"))
+
+
+def guard_antigravity():
+    try:
+        hits = cached("agy_model_scan", 86400, agy_model_scan)
+    except Exception:
+        return []
+    if not hits:
+        return []
+    return [F("agy-model-pinned", "guardian", f"{len(hits)} scripts call Antigravity with a pinned model",
+              "Founder 13 Oct: on Antigravity use ONLY the latest Gemini Flash. Call ~/Developer-artifacts/bin/agy-flash "
+              "(it resolves the newest flash and refuses --model):\n" + "\n".join(f"- {h}" for h in hits[:20]),
+              grace=0, amber=True)]
+
+
 GUARDS = {"ci": guard_ci, "handoffs": guard_handoffs, "lines": guard_lines, "hosts": guard_hosts, "prod": guard_prod,
-          "predict": guard_predict, "vault": guard_vault_web, "refusals": guard_refusals, "mirrors": guard_mirrors, "observability": guard_observability, "scheduler": guard_scheduler, "results": guard_results}
+          "predict": guard_predict, "vault": guard_vault_web, "refusals": guard_refusals, "mirrors": guard_mirrors, "observability": guard_observability, "scheduler": guard_scheduler, "results": guard_results, "antigravity": guard_antigravity}
 
 
 # ---------------------------------------------------------------- Linear + state
