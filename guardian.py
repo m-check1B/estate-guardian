@@ -1363,8 +1363,71 @@ def guard_scheduler():
     return out
 
 
+RESULT_OWNERS = [("ADVERTES-IT", "guardian"), ("TRZNICE", "trznice"), ("SYFON", "syfon"), ("BOZP", "bezpecnost"), ("BEZPECNOST", "bezpecnost"),
+                 ("COUNCILNOW", "councilnow"), ("ADVERTES", "advertes"), ("FLAGSHIP", "flagship"), ("SIMS", "flagship"),
+                 ("GUARDIAN", "guardian")]
+
+
+def guard_results():
+    """13 Oct: the Tržnice pilot stood still from 22:12 to 05:20 because Senior's seat result
+    RESULT-SPHERE-RELEASE-WORKSPACES.md said PARTIAL (backport not applied, no PR) and nobody followed up. Every line
+    looked alive (fresh heartbeats, pulses every 30 min) while the work did not move. A worker RESULT whose first line
+    is PARTIAL/BLOCKED, with no newer DONE result of the same job, goes to its owner after 60 min and becomes P0 after
+    3 h (stalled work is an outage of the line)."""
+    out = []
+    import glob as _glob
+    files = _glob.glob(f"{ART}/RESULT-*.md")
+    newest_done = {}
+    for f in files:
+        base = re.sub(r"(\.run\d+-BLOCK|-BLOCK|-PARTIAL)?\.md$", "", os.path.basename(f))
+        try:
+            first = open(f, errors="replace").readline().strip()
+        except OSError:
+            continue
+        if re.match(r"(DONE|PASS|READY|OK)\b", first):
+            newest_done[base] = max(newest_done.get(base, 0), os.path.getmtime(f))
+    old = []
+    for f in files:
+        name = os.path.basename(f)
+        base = re.sub(r"(\.run\d+-BLOCK|-BLOCK|-PARTIAL)?\.md$", "", name)
+        try:
+            first = open(f, errors="replace").readline().strip()
+        except OSError:
+            continue
+        if not re.match(r"(PARTIAL|BLOCKED|BLOCK)\b", first):
+            continue
+        mt = os.path.getmtime(f)
+        if newest_done.get(base, 0) > mt:
+            continue  # a later run of the same job finished
+        age = (NOW - mt) / 60
+        if age < 60 or age > 48 * 60:
+            continue
+        owner = next((o for k, o in RESULT_OWNERS if k in name.upper()), "senior")
+        try:
+            body = open(f, errors="replace").read()
+        except OSError:
+            body = ""
+        # whoever picks a stalled result up appends "FOLLOW-UP <HH:MM> <who>: <seat/issue>"; that counts for 6 h
+        fu = re.findall(r"^FOLLOW-UP\b.*$", body, re.M)
+        if fu and NOW - os.path.getmtime(f) < 6 * 3600:
+            continue
+        founder_wait = bool(re.search(r"founder|2fa|payment|account creation|apple id|notary|chrome profile", body[:1500], re.I))
+        if age > 12 * 60:
+            old.append(f"{name} ({age / 60:.0f} h, {owner})")
+            continue
+        out.append(F(f"result-stalled-{base.lower()}", owner,
+                     f"Worker result {name} says {first.split()[0]} for {age / 60:.1f} h with no follow-up",
+                     f"{first[:300]}\nNext step for the owner: re-hire with the missing piece, hand it to the named owner, "
+                     "or close it as superseded (write a DONE/SUPERSEDED result). Stalled work is an outage of the line.",
+                     grace=0, nudge=(owner == "senior"), p0=age > 180 and not founder_wait, amber=age <= 180 or founder_wait))
+    if old:
+        out.append(F("result-stalled-backlog", "guardian", f"{len(old)} PARTIAL/BLOCKED worker results 12–48 h old",
+                     "\n".join(f"- {x}" for x in sorted(old)), grace=0, amber=True, file=False))
+    return out
+
+
 GUARDS = {"ci": guard_ci, "handoffs": guard_handoffs, "lines": guard_lines, "hosts": guard_hosts, "prod": guard_prod,
-          "predict": guard_predict, "vault": guard_vault_web, "refusals": guard_refusals, "mirrors": guard_mirrors, "observability": guard_observability, "scheduler": guard_scheduler}
+          "predict": guard_predict, "vault": guard_vault_web, "refusals": guard_refusals, "mirrors": guard_mirrors, "observability": guard_observability, "scheduler": guard_scheduler, "results": guard_results}
 
 
 # ---------------------------------------------------------------- Linear + state
@@ -1432,6 +1495,29 @@ def hist(ev):
         h.write(json.dumps(ev) + "\n")
 
 
+def sync_severity_history(f, s, cls=None):
+    """Keep each continuous severity interval represented in the history log."""
+    if not s.get("opened"):
+        if cls is None:
+            return
+        s["opened"], s["class"], s["p0"] = NOW, cls["class"], bool(f.p0)
+        s["history_first"] = s.get("first", NOW)
+        hist({"ev": "open", "key": f.key, "class": cls["class"], "p0": bool(f.p0),
+              "owner": f.owner, "first": s["history_first"]})
+        return
+
+    current_p0 = bool(f.p0)
+    previous_p0 = s.get("p0")
+    if previous_p0 is None or current_p0 != bool(previous_p0):
+        current_class = s.get("class") or (cls or {}).get("class")
+        hist({"ev": "close", "key": f.key, "class": current_class,
+              "first": s.get("history_first", s.get("first")), "last": NOW})
+        hist({"ev": "open", "key": f.key, "class": current_class, "p0": current_p0,
+              "owner": f.owner, "first": NOW})
+        s["opened"], s["class"], s["history_first"] = NOW, current_class, NOW
+    s["p0"] = current_p0
+
+
 def wake_pulse_runner(lines):
     thread = open(f"{ART}/.pulse-runner-thread").read().strip()
     text = (f"GUARDIAN-WAKE {stamp()}: P0 reliability findings need action now (details in "
@@ -1493,6 +1579,7 @@ def main():
     for f in findings:
         s = known.setdefault(f.key, {"first": NOW, "posted": 0, "digest": "", "issue": None, "ok": 0})
         s.update(last=NOW, ok=0, ok_since=None, title=f.title, owner=f.owner, hold=f.hold)
+        sync_severity_history(f, s)
         age_min = (NOW - s["first"]) / 60
         digest = hashlib.sha1(f.detail.encode()).hexdigest()
         if age_min < f.grace:
@@ -1517,9 +1604,7 @@ def main():
             card = classify.card_markdown(cls)
         except Exception as e:
             cls, card = {"class": "unclassified"}, f"(classifier error {type(e).__name__})"
-        if not s.get("opened"):
-            s["opened"], s["class"] = NOW, cls["class"]
-            hist({"ev": "open", "key": f.key, "class": cls["class"], "p0": f.p0, "owner": f.owner, "first": s["first"]})
+        sync_severity_history(f, s, cls)
         body = (f"**{f.title}**\n\n{f.detail}\n\n{card}\n\n"
                 f"First seen {stamp(s['first'])}, still failing at {stamp()}. Owner line: **{f.owner}**. "
                 f"Filed by GUARDIAN (no-AI watch, every 5 min; estate-guardian/guardian.py). "
@@ -1542,7 +1627,8 @@ def main():
         s["ok_since"] = s.get("ok_since") or NOW
         if s["ok"] >= 2 and NOW - s["ok_since"] >= s.get("hold", 0) * 3600:
             if s.get("opened"):
-                hist({"ev": "close", "key": k, "class": s.get("class"), "first": s.get("first"), "last": s.get("last")})
+                hist({"ev": "close", "key": k, "class": s.get("class"),
+                      "first": s.get("history_first", s.get("first")), "last": s.get("last")})
             if s.get("posted"):
                 try:
                     board.recover(s.get("issue"), f"RECOVERED at {stamp()} (2 clean GUARDIAN runs). "
