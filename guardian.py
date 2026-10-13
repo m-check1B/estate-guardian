@@ -21,6 +21,7 @@ Usage: guardian.py [--dry-run] [--only ci,hosts,...]
 """
 import concurrent.futures as cf, datetime as dt, hashlib, json, os, re, socket, sqlite3, ssl, subprocess, sys, time
 import urllib.request
+import glob as _glob_mod
 import urllib.parse
 
 # Cloudflare refuses Python's default 'Python-urllib/3.x' UA (403, error 1010; 11 Oct). Every request sets one.
@@ -1427,18 +1428,27 @@ def guard_results():
 
 
 def agy_model_scan():
-    """Callers that pin an Antigravity model instead of using bin/agy-flash (Founder 13 Oct: latest Flash only)."""
+    """Callers that pin an Antigravity model instead of using bin/agy-flash (Founder 13 Oct: latest Flash only).
+    13 Oct lesson: a scan over all of ~/github timed out at 90 s and looked like "nothing found"; heavy dirs are
+    excluded and a timeout raises (so it shows as a failed check, not a clean one)."""
     roots = [os.path.expanduser(p) for p in CFG.get("agy_scan_roots", ["~/github", "~/Developer-artifacts/bin"])]
-    rc, txt, _ = sh(["grep", "-rIlE", r"[\"' ]agy[\"' ,].*--model|agy +--model", *roots, "--include=*.py", "--include=*.sh",
-                     "--include=*.mjs", "--include=*.ts", "--exclude-dir=node_modules", "--exclude-dir=.git"], t=90)
-    return sorted(l for l in txt.splitlines() if l and not l.endswith("agy-flash"))
+    skip = CFG.get("agy_scan_exclude", ["opensre"])  # third-party code that passes a user-chosen model through
+    ex = []
+    for d in ["node_modules", ".git", "_worktrees", ".venv", "venv", "dist", "build", ".next", "site-packages",
+              "_archive", *skip]:
+        ex.append(f"--exclude-dir={d}")
+    rc, txt, err = sh(["grep", "-rIlE", r"[\"' ]agy[\"' ,].*--model|agy +--model", *roots, "--include=*.py",
+                       "--include=*.sh", "--include=*.mjs", "--include=*.ts", *ex], t=240)
+    if rc == 124:
+        raise TimeoutError("agy scan timed out")
+    return sorted(l for l in txt.splitlines() if l and not l.endswith("agy-flash") and ".bak" not in l)
 
 
 def guard_antigravity():
     try:
         hits = cached("agy_model_scan", 86400, agy_model_scan)
-    except Exception:
-        return []
+    except Exception as e:
+        return [F("agy-scan-failed", "guardian", "Antigravity model scan failed", str(e)[:200], grace=0, amber=True, file=False)]
     if not hits:
         return []
     return [F("agy-model-pinned", "guardian", f"{len(hits)} scripts call Antigravity with a pinned model",
@@ -1447,8 +1457,42 @@ def guard_antigravity():
               grace=0, amber=True)]
 
 
+def root_checkouts():
+    """Real git checkouts directly under ~/github that duplicate a repo kept under ~/github/current/<category>/
+    (layout rule). 12-13 Oct: publications and ai-music-video were created at the root; a stale root copy of
+    kraliki-sphere can receive edits meant for the canonical checkout."""
+    root = os.path.expanduser("~/github")
+    out = []
+    for d in sorted(os.listdir(root)):
+        p = os.path.join(root, d)
+        if d == "current" or os.path.islink(p) or not os.path.isdir(os.path.join(p, ".git")):
+            continue
+        rc, url, _ = sh(["git", "-C", p, "remote", "get-url", "origin"], t=10)
+        name = re.sub(r"\.git$", "", url.strip().rstrip("/").split("/")[-1]) if url.strip() else d
+        canon = [c for c in _glob_mod.glob(os.path.join(root, "current", "*", name)) if os.path.isdir(c)]
+        if canon:
+            rc, st, _ = sh(["git", "-C", p, "status", "--porcelain"], t=20)
+            rc2, ahead, _ = sh(["git", "-C", p, "log", "--oneline", "@{u}..HEAD"], t=20)
+            out.append(f"~/github/{d} duplicates {canon[0].replace(root, '~/github')}"
+                       f" ({'dirty' if st.strip() else 'clean'}, {len(ahead.splitlines()) if rc2 == 0 else '?'} unpushed)")
+    return out
+
+
+def guard_layout():
+    try:
+        dups = cached("root_checkouts", 6 * 3600, root_checkouts)
+    except Exception:
+        return []
+    if not dups:
+        return []
+    return [F("layout-root-duplicates", "guardian", f"{len(dups)} duplicate checkouts at the ~/github root",
+              "Checkouts live only under ~/github/current/<category>/<repo>. Each root copy below: push or move any work, "
+              "then replace it with a symlink to the canonical checkout (owner decides; GUARDIAN deletes nothing):\n"
+              + "\n".join(f"- {x}" for x in dups), grace=0, amber=True)]
+
+
 GUARDS = {"ci": guard_ci, "handoffs": guard_handoffs, "lines": guard_lines, "hosts": guard_hosts, "prod": guard_prod,
-          "predict": guard_predict, "vault": guard_vault_web, "refusals": guard_refusals, "mirrors": guard_mirrors, "observability": guard_observability, "scheduler": guard_scheduler, "results": guard_results, "antigravity": guard_antigravity}
+          "predict": guard_predict, "vault": guard_vault_web, "refusals": guard_refusals, "mirrors": guard_mirrors, "observability": guard_observability, "scheduler": guard_scheduler, "results": guard_results, "antigravity": guard_antigravity, "layout": guard_layout}
 
 
 # ---------------------------------------------------------------- Linear + state
