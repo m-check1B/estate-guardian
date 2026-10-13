@@ -151,6 +151,31 @@ How it works:
 3. GUARDIAN reviews it: least privilege, no secret printing, rollback, matches the brief. It then posts `GUARDIAN APPROVE PLAN <issue> sha256:<12hex>`, or asks for changes.
 4. Codex executes only on a matching approval with the plan's hash unchanged.
 
+## Classifier presets (`classify.py`)
+
+The pain → solution classifier is a product-agnostic core. Each product brings a preset file:
+
+- `presets/guardian.json`: the estate failure classes (`taxonomy.json`). The module-level `classify()` and `jev_ask()` use it, so the guard, the router and the autoresearch eval are unchanged.
+- `presets/jack.json`: an empty slot for Agent Jack. Until it has classes, everything is `unclassified` and goes to its judge queue.
+- `presets/example.json`: a template. Copy it into your product repo and point `Classifier("/path/to/preset.json")` or `--preset` at it.
+
+A preset declares:
+- `taxonomy`: inline, or a path relative to the preset;
+- the Jev `question` and `min_conf`;
+- `paths`: the judge queue, plus retained Jev answers for free replay;
+- the TypeSafe `key` source: `keychain`, `file` (a server secret file) or `env`;
+- optional extra typed `questions` (choice / yes-no / score), asked with `Classifier.ask(state, [names])`.
+
+```python
+from classify import Classifier
+c = Classifier("/srv/trznice/classify/trznice.json")
+c.classify("Worker cannot see the job board", key="bug-123")   # rules, then Jev, else the judge queue
+c.ask(job_text, ["lane", "level"])                          # product-defined typed questions
+```
+
+To pin it in a product: `pip install "git+https://<forge>/matej/estate-guardian.git@<commit-or-tag>"` (package `estate-classify`, module `classify`).
+Tests: `python3 -m unittest test_classify_presets`.
+
 ## Multi-lab worker router (`worker_route.py`, `~/Developer-artifacts/bin/hire-auto.sh`)
 
 The Founder asked for this on 11 Oct 2026: "we need multilab not anthropic only", "needs on and off for out of usage situations and needs defined fallbacks cleanly", and to use T3 Code, Tentacles and CodexBar.

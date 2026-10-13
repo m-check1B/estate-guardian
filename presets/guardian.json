@@ -1,0 +1,16 @@
+{
+ "name": "guardian",
+ "description": "GUARDIAN estate failure classes (infra + delivery incidents \u2192 solution card).",
+ "taxonomy": "../taxonomy.json",
+ "question": "Which failure mechanism best explains this infrastructure or delivery problem?",
+ "min_conf": 0.6,
+ "user_agent": "estate-guardian/1",
+ "paths": {
+  "judge_queue": "~/Developer-artifacts/guardian/needs-judgment.jsonl",
+  "answers": "~/Developer-artifacts/guardian/jev-answers.jsonl"
+ },
+ "key": {
+  "source": "keychain",
+  "items_from_config": "jev_keychain_items"
+ }
+}

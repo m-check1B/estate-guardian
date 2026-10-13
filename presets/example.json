@@ -1,0 +1,58 @@
+{
+ "name": "example",
+ "description": "Template: copy into your product repo and point Classifier()/--preset at the file.",
+ "taxonomy": {
+  "classes": {
+   "bug": {
+    "desc": "Something that worked is broken or wrong.",
+    "key_prefixes": [
+     "bug-"
+    ],
+    "patterns": [
+     "\\berror\\b",
+     "\\bbroken\\b",
+     "\\bcrash"
+    ],
+    "card": {
+     "root_cause_question": "What changed?",
+     "smallest_safe_fix": "Revert or patch the change.",
+     "guard": "A test that fails on it.",
+     "owner": "product",
+     "playbook": "04"
+    }
+   },
+   "request": {
+    "desc": "A wish for something new.",
+    "key_prefixes": [],
+    "patterns": [
+     "\\bplease add\\b",
+     "\\bwould like\\b"
+    ],
+    "card": {
+     "root_cause_question": "Who needs it and why?",
+     "smallest_safe_fix": "Write the smallest spec.",
+     "guard": "-",
+     "owner": "product",
+     "playbook": "09"
+    }
+   }
+  }
+ },
+ "question": "Is this a bug or a request?",
+ "min_conf": 0.6,
+ "user_agent": "my-product-classify/1",
+ "paths": {
+  "judge_queue": "./needs-judgment.jsonl",
+  "answers": "./jev-answers.jsonl"
+ },
+ "key": {
+  "source": "env",
+  "name": "TYPESAFE_API_KEY"
+ },
+ "questions": {
+  "urgent": {
+   "type": "noul",
+   "instructions": "Does this block a user from working right now?"
+  }
+ }
+}

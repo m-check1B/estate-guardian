@@ -1,0 +1,19 @@
+{
+ "name": "jack",
+ "description": "EMPTY SLOT for the Agent Jack integrator: fill classes, questions and paths. Until then every case is unclassified.",
+ "taxonomy": {
+  "classes": {}
+ },
+ "question": "Which class best describes this Agent Jack case?",
+ "min_conf": 0.6,
+ "user_agent": "agent-jack-classify/1",
+ "paths": {
+  "judge_queue": "/var/lib/agentjack/classify/needs-judgment.jsonl",
+  "answers": "/var/lib/agentjack/classify/jev-answers.jsonl"
+ },
+ "key": {
+  "source": "file",
+  "path": "/run/secrets/typesafe-api-key"
+ },
+ "questions": {}
+}
