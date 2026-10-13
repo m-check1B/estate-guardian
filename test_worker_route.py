@@ -130,8 +130,10 @@ class Router(unittest.TestCase):
         self.assertEqual((d["model_lab"], d["host"]), ("opus", "pro"))
         self.assertIn("hire.sh claude", d["hire"])
         self.off("opus", "founder")
+        wr.LABS_FILE = self.path("labs.json", self.labs)
         self.assertEqual(wr.capability("clickup.advertes")["model_lab"], "sonnet")
         self.off("luna", "founder")
+        wr.LABS_FILE = self.path("labs.json", self.labs)
         self.assertTrue(wr.capability("vault.credentials")["blocked"])  # vault never falls back off Luna
         self.assertTrue(wr.capability("no.such.thing")["blocked"])
 
