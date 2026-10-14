@@ -468,6 +468,22 @@ def refresh_lab_readiness():
             out[host] = {l["instanceId"]: bool(l.get("ready")) for l in json.loads(txt)["labs"]}
         except Exception:
             continue
+    # 14 Oct: doctor said claudeAgent "ready" on the iOS mini while its seat answered "Not logged in".
+    # A seat's own short "not logged in" reply in the last 6 h overrides doctor for that host + instance.
+    for host, label, bin_ in ((None, "pro", "sqlite3"), (DEV_WORKERS, "jupiter", "sqlite3"), (IOS_MINI, "mini", "/usr/bin/sqlite3")):
+        q = ("select distinct coalesce(s.provider_instance_id, s.provider_name, '') from projection_thread_sessions s "
+             "join projection_thread_messages m on m.thread_id=s.thread_id and m.role='assistant' "
+             "where m.created_at > strftime('%Y-%m-%dT%H:%M','now','-6 hours') and length(m.text) < 200 "
+             "and (lower(m.text) like '%not logged in%' or lower(m.text) like '%please run /login%' "
+             "or lower(m.text) like '%invalid api key%');")
+        if host is None:
+            rc, txt, _ = sh([bin_, "-readonly", f"{HOME}/.t3/userdata/state.sqlite", q], t=20)
+        else:
+            rc, txt, _ = sh(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", host,
+                             f"{bin_} -readonly ~/.t3/userdata/state.sqlite"], inp=q, t=30)
+        for inst in filter(None, (l.strip() for l in txt.splitlines())):
+            out.setdefault(label, {})[inst] = False
+            out.setdefault("_logged_out", []).append(f"{label}:{inst}")
     if out:
         p = f"{ART}/guardian/lab-readiness.json"
         json.dump(dict(out, at=stamp()), open(p + ".new", "w"), indent=1)
