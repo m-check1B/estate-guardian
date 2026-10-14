@@ -1521,8 +1521,24 @@ def playbook_paths():
     return bad
 
 
+def hire_message_lint():
+    """14 Oct: a backtick added to hire.sh's double-quoted --message made bash run a command substitution on every hire
+    ("syntax error near unexpected token '|'"), silently dropping that rule from every seat's standing text."""
+    try:
+        line = next(l for l in open(f"{ART}/bin/hire.sh") if '--message "Read and execute' in l)
+    except (OSError, StopIteration):
+        return []
+    body = line.split('--message "', 1)[1]
+    return [x for x in ("`", "$(") if x in body]
+
+
 def guard_layout():
     out = []
+    bad = hire_message_lint()
+    if bad:
+        out.append(F("hire-message-substitution", "guardian", f"hire.sh --message contains {' and '.join(bad)}",
+                     "Inside the double-quoted standing rules, bash runs it as a command substitution on every hire and drops "
+                     "that text. Use plain words, no backticks or $( ).", grace=0, p0=True))
     try:
         miss = cached("playbook_paths", 3600, playbook_paths)
     except Exception:
