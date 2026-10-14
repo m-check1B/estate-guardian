@@ -1506,14 +1506,38 @@ def root_checkouts():
     return out
 
 
+PLAYBOOK_WT = "github/current/_worktrees/engineering-playbook-master"
+
+
+def playbook_paths():
+    """14 Oct: the Pro had no playbook worktree, so every Pro seat failed to read skills/README.md, and the pulse's
+    refresh hid the error (2>/dev/null). Every seat host must have it, and it must be at most a day behind origin/master."""
+    bad = []
+    probe = f"cd ~/{PLAYBOOK_WT} 2>/dev/null && test -f skills/README.md && echo age=$(( $(date +%s) - $(git log -1 --format=%ct) )) || echo missing"
+    for label, host in (("Pro", None), ("dev-workers", DEV_WORKERS)):
+        rc, txt, _ = (sh(["sh", "-c", probe], t=20) if host is None else ssh(host, probe, t=20))
+        if "missing" in txt:
+            bad.append(f"{label}: ~/{PLAYBOOK_WT} missing (seats cannot read skills/README.md)")
+    return bad
+
+
 def guard_layout():
+    out = []
+    try:
+        miss = cached("playbook_paths", 3600, playbook_paths)
+    except Exception:
+        miss = []
+    if miss:
+        out.append(F("playbook-worktree-missing", "guardian", f"Playbook worktree missing on {len(miss)} seat host(s)",
+                     "Create it detached at origin/master (git worktree add --detach … origin/master); pulse.sh keeps it current.\n"
+                     + "\n".join(f"- {x}" for x in miss), grace=0))
     try:
         dups = cached("root_checkouts", 6 * 3600, root_checkouts)
     except Exception:
-        return []
+        return out
     if not dups:
-        return []
-    return [F("layout-root-duplicates", "guardian", f"{len(dups)} duplicate checkouts at the ~/github root",
+        return out
+    return out + [F("layout-root-duplicates", "guardian", f"{len(dups)} duplicate checkouts at the ~/github root",
               "Checkouts live only under ~/github/current/<category>/<repo>. Each root copy below: push or move any work, "
               "then replace it with a symlink to the canonical checkout (owner decides; GUARDIAN deletes nothing):\n"
               + "\n".join(f"- {x}" for x in dups), grace=0, amber=True)]
