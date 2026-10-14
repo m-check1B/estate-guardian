@@ -19,7 +19,7 @@ Read-only everywhere except Linear and the local state files. Secrets: the Linea
 Keychain item named in the estate config (linear.key_item) and never printed.
 Usage: guardian.py [--dry-run] [--only ci,hosts,...]
 """
-import concurrent.futures as cf, datetime as dt, hashlib, json, os, re, socket, sqlite3, ssl, subprocess, sys, time
+import shlex, concurrent.futures as cf, datetime as dt, hashlib, json, os, re, socket, sqlite3, ssl, subprocess, sys, time
 import urllib.request
 import glob as _glob_mod
 import urllib.parse
@@ -1641,8 +1641,102 @@ def guard_usage():
     return out
 
 
+# ---------------------------------------------------------------- guard: orphaned dev servers on dev-workers
+# 14 Oct 02:55: 22 OOM kills in 30 min on dev-workers. 7 `vite dev` servers left behind by seats whose PR (#959) had
+# merged hours earlier held ~250 MB each. Act + log (Founder 13 Oct: no approval gates, act with undo): reap vite
+# dev/preview and headless Chrome that are ORPHANED (parent = init / systemd --user), older than 90 min, inside a seat
+# worktree, and whose worktree has no running T3 thread and no T3 activity in the last 30 min (ready != idle).
+# Keep list: guardian/reap-keep.txt (one worktree path fragment per line, e.g. a deliberate long-running preview).
+REAP_KEEP = f"{ART}/guardian/reap-keep.txt"
+REAP_LOG = f"{ART}/guardian/reaped.jsonl"
+REAP_PROBE = r'''python3 - "$@" <<'EOF'
+import json, os, sqlite3, sys, time
+keep = [k for k in sys.argv[1:] if k]
+act = os.environ.get("REAP_ACT") == "1"
+def _cmd(p):
+    try:
+        return open(f"/proc/{p}/cmdline", "rb").read()
+    except Exception:
+        return b""
+user_systemd = {p for p in os.listdir("/proc") if p.isdigit() and _cmd(p).startswith(b"/usr/lib/systemd/systemd")} | {"1"}
+try:
+    c = sqlite3.connect("file:" + os.path.expanduser("~/.t3/userdata/state.sqlite") + "?mode=ro", uri=True)
+    live = [r[0] for r in c.execute("select t.worktree_path from projection_threads t join projection_thread_sessions s using(thread_id) "
+        "where t.worktree_path is not null and (s.status='running' or exists (select 1 from projection_thread_activities a "
+        "where a.thread_id=t.thread_id and a.created_at > strftime('%Y-%m-%dT%H:%M','now','-30 minutes')))")]
+except Exception as e:
+    print(json.dumps({"error": type(e).__name__})); sys.exit()
+tick = os.sysconf("SC_CLK_TCK"); up = float(open("/proc/uptime").read().split()[0]); out = []
+for p in filter(str.isdigit, os.listdir("/proc")):
+    try:
+        cmd = open(f"/proc/{p}/cmdline","rb").read().replace(b"\0", b" ").decode(errors="replace")
+        st = open(f"/proc/{p}/stat").read().rsplit(")", 1)[1].split()
+        cwd = os.readlink(f"/proc/{p}/cwd")
+    except Exception:
+        continue
+    if not (("vite" in cmd and (" dev" in cmd or " preview" in cmd or cmd.rstrip().endswith("vite"))) or "chrome-headless" in cmd or "headless_shell" in cmd):
+        continue
+    ppid, age = st[1], up - int(st[19]) / tick
+    if ppid not in user_systemd or age < 5400 or "/_worktrees/" not in cwd:
+        continue
+    wt = cwd.split("/web")[0]
+    if any(k in cwd for k in keep) or any(l and (cwd.startswith(l) or l.startswith(wt)) for l in live):
+        continue
+    # Seats often run in a worktree T3 doesn't record (worktree_path null), so also keep when any T3 activity in the
+    # last 60 min mentions this worktree, or its git index/HEAD changed in the last 60 min.
+    name = wt.rsplit("/_worktrees/", 1)[-1]
+    if c.execute("select 1 from projection_thread_activities where created_at > strftime('%Y-%m-%dT%H:%M','now','-60 minutes') "
+                 "and payload_json like ? limit 1", (f"%{name}%",)).fetchone():
+        continue
+    try:
+        g = open(f"{wt}/.git").read().split("gitdir:")[1].strip() if os.path.isfile(f"{wt}/.git") else f"{wt}/.git"
+        if time.time() - max(os.path.getmtime(f"{g}/{x}") for x in ("index", "HEAD") if os.path.exists(f"{g}/{x}")) < 3600:
+            continue
+    except Exception:
+        continue
+    rss = int(open(f"/proc/{p}/statm").read().split()[1]) * os.sysconf("SC_PAGE_SIZE") // 2**20
+    if act:
+        try:
+            os.killpg(int(p), 15) if os.getpgid(int(p)) == int(p) else os.kill(int(p), 15)
+        except Exception:
+            os.kill(int(p), 15)
+    out.append({"pid": int(p), "age_min": int(age / 60), "rss_mb": rss, "cwd": cwd, "cmd": cmd[:80]})
+print(json.dumps(out))
+EOF
+'''
+
+
+def guard_reaper():
+    keep = []
+    try:
+        keep = [l.strip() for l in open(REAP_KEEP) if l.strip() and not l.startswith("#")]
+    except FileNotFoundError:
+        pass
+    act = "--dry-run" not in sys.argv
+    args = " ".join(shlex.quote(k) for k in keep)
+    rc, txt, err = sh(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", DEV_WORKERS, f"REAP_ACT={'1' if act else '0'} sh -s -- {args}"],
+           inp=REAP_PROBE, t=40)
+    try:
+        reaped = json.loads(txt.strip().splitlines()[-1])
+    except Exception:
+        return []
+    if not isinstance(reaped, list) or not reaped:
+        return []
+    if act:
+        with open(REAP_LOG, "a") as f:
+            for r in reaped:
+                f.write(json.dumps({"at": stamp(), **r}) + "\n")
+    mb = sum(r["rss_mb"] for r in reaped)
+    return [F("devworkers-orphans-reaped", "guardian",
+              f"dev-workers: {'reaped' if act else 'would reap'} {len(reaped)} orphaned dev servers ({mb} MB)",
+              "Orphaned (parent gone), > 90 min old, worktree without a running or recently active T3 thread. Undo = restart "
+              "the server in that worktree; keep one with a line in guardian/reap-keep.txt. Log: guardian/reaped.jsonl.\n"
+              + "\n".join(f"- pid {r['pid']} {r['age_min']} min {r['rss_mb']} MB {r['cwd']}" for r in reaped[:20]),
+              grace=0, amber=True)]
+
+
 GUARDS = {"ci": guard_ci, "handoffs": guard_handoffs, "lines": guard_lines, "hosts": guard_hosts, "prod": guard_prod,
-          "predict": guard_predict, "vault": guard_vault_web, "refusals": guard_refusals, "mirrors": guard_mirrors, "observability": guard_observability, "scheduler": guard_scheduler, "results": guard_results, "antigravity": guard_antigravity, "layout": guard_layout, "t3host": guard_t3host, "usage": guard_usage}
+          "predict": guard_predict, "vault": guard_vault_web, "refusals": guard_refusals, "mirrors": guard_mirrors, "observability": guard_observability, "scheduler": guard_scheduler, "results": guard_results, "antigravity": guard_antigravity, "layout": guard_layout, "t3host": guard_t3host, "usage": guard_usage, "reaper": guard_reaper}
 
 
 # ---------------------------------------------------------------- Linear + state
