@@ -1518,6 +1518,13 @@ def playbook_paths():
         rc, txt, _ = (sh(["sh", "-c", probe], t=20) if host is None else ssh(host, probe, t=20))
         if "missing" in txt:
             bad.append(f"{label}: ~/{PLAYBOOK_WT} missing (seats cannot read skills/README.md)")
+    # 14 Oct: a release-blocking Luna B3 on dev-workers refused PR #974 because AGENTS.md requires the
+    # alibaba-open-code-review skill, and neither the skill nor `ocr` was installed there (the Pro had both).
+    ocr = "test -f ~/.codex/skills/alibaba-open-code-review/SKILL.md && (PATH=$HOME/.local/node/bin:$HOME/.hermes/node/bin:$PATH; command -v ocr >/dev/null) && echo ok || echo missing"
+    for label, host in (("Pro", None), ("dev-workers", DEV_WORKERS)):
+        rc, txt, _ = (sh(["sh", "-c", ocr], t=20) if host is None else ssh(host, ocr, t=20))
+        if "missing" in txt:
+            bad.append(f"{label}: review skill alibaba-open-code-review or the `ocr` CLI missing (B3 reviewers refuse)")
     return bad
 
 
