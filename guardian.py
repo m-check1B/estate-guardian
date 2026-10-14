@@ -1552,6 +1552,8 @@ T3_PROBE = r'''
 awk '/MemTotal/{print "mem_total_kb="$2} /MemAvailable/{print "mem_avail_kb="$2}' /proc/meminfo
 systemctl --user show t3code -p MemoryCurrent -p NRestarts -p ActiveEnterTimestamp 2>/dev/null
 echo "oom_t3=$(journalctl --user --since '-30min' 2>/dev/null | grep -c 't3code.service: A process of this unit has been killed by the OOM')"
+echo "oom_any=$(journalctl -k --since '-30min' 2>/dev/null | grep -c 'Out of memory: Killed process')"
+echo "gate_busy=$(ls /tmp/jack-gate-slots 2>/dev/null | while read f; do fuser /tmp/jack-gate-slots/$f >/dev/null 2>&1 && echo x; done | wc -l)"
 python3 - <<'EOF'
 import sqlite3, os, json
 try:
@@ -1578,10 +1580,23 @@ def guard_t3host():
     t3mem = int(d.get("MemoryCurrent", "0") or 0) if d.get("MemoryCurrent", "").isdigit() else 0
     seats = int(d.get("seats_running", "0") or 0)
     share = t3mem / total if total else 0
-    if int(d.get("oom_t3", "0") or 0):
-        out.append(F("t3-oom", "guardian", "dev-workers: the OOM killer hit t3code in the last 30 min",
-                     "Every running seat is lost on the restart. Cap seats (t3_seat_cap), move extras to the Pro/mini.",
+    restarted = False
+    try:
+        restarted = (NOW - dt.datetime.strptime(" ".join(d.get("ActiveEnterTimestamp", "").split()[1:3]), "%Y-%m-%d %H:%M:%S")
+                     .timestamp()) < 1800
+    except ValueError:
+        pass
+    if int(d.get("oom_t3", "0") or 0) and restarted:
+        out.append(F("t3-oom", "guardian", "dev-workers: the OOM killer took t3code and it restarted in the last 30 min",
+                     "Every running seat lost its session. Cap seats (t3_seat_cap), move extras to the Pro/mini.",
                      grace=0, p0=True))
+    elif int(d.get("oom_any", "0") or 0) >= 3 or int(d.get("oom_t3", "0") or 0):
+        # 14 Oct 03:08-03:12: the kills hit seats' pytest/browser children inside t3code's cgroup, not t3code itself.
+        out.append(F("devworkers-oom", "senior",
+                     f"dev-workers: {d.get('oom_any', '?')} kernel OOM kills in 30 min ({seats} seats, gate slots busy {d.get('gate_busy', '?')})",
+                     "Seat gates/tests are being killed. Gates run only through ~/bin/gate-slot (GATE_SLOTS=2); if kills "
+                     "continue set GATE_SLOTS=1, reap orphans (guard_reaper); playbook 16.", grace=0,
+                     p0=int(d.get("oom_any", "0") or 0) >= 10))
     elif share >= 0.7 or avail < 3 or seats > T3_SEAT_CAP:
         out.append(F("t3-pressure", "senior",
                      f"dev-workers seat pressure: {seats} seats running (cap {T3_SEAT_CAP}), t3code {t3mem / 2**30:.1f} GiB "
