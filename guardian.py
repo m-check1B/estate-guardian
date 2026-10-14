@@ -1554,6 +1554,29 @@ systemctl --user show t3code -p MemoryCurrent -p NRestarts -p ActiveEnterTimesta
 echo "oom_t3=$(journalctl --user --since '-30min' 2>/dev/null | grep -c 't3code.service: A process of this unit has been killed by the OOM')"
 echo "oom_any=$(journalctl -k --since '-30min' 2>/dev/null | grep -c 'Out of memory: Killed process')"
 echo "gate_busy=$(ls /tmp/jack-gate-slots 2>/dev/null | while read f; do fuser /tmp/jack-gate-slots/$f >/dev/null 2>&1 && echo x; done | wc -l)"
+python3 - <<'EOF2'
+import os
+def anc(p):
+    out = []
+    while p not in ("0", "1"):
+        try:
+            out.append(open(f"/proc/{p}/cmdline", "rb").read().decode(errors="replace"))
+            p = open(f"/proc/{p}/stat").read().rsplit(")", 1)[1].split()[1]
+        except Exception:
+            break
+    return " ".join(out)
+bypass = []
+for p in filter(str.isdigit, os.listdir("/proc")):
+    try:
+        rss = int(open(f"/proc/{p}/statm").read().split()[1]) * os.sysconf("SC_PAGE_SIZE")
+        cwd = os.readlink(f"/proc/{p}/cwd")
+        cmd = open(f"/proc/{p}/cmdline", "rb").read().decode(errors="replace")
+    except Exception:
+        continue
+    if rss > 800 * 2**20 and "/_worktrees/" in cwd and "python" in cmd and "gate-slot" not in anc(p):
+        bypass.append(cwd.split("/_worktrees/")[-1].split("/")[0])
+print("gate_bypass=" + ",".join(sorted(set(bypass))))
+EOF2
 python3 - <<'EOF'
 import sqlite3, os, json
 try:
@@ -1597,7 +1620,12 @@ def guard_t3host():
                      "Seat gates/tests are being killed. Gates run only through ~/bin/gate-slot (GATE_SLOTS=2); if kills "
                      "continue set GATE_SLOTS=1, reap orphans (guard_reaper); playbook 16.", grace=0,
                      p0=int(d.get("oom_any", "0") or 0) >= 10))
-    elif share >= 0.7 or avail < 3 or seats > T3_SEAT_CAP:
+    if d.get("gate_bypass"):
+        out.append(F("devworkers-gate-bypass", "senior",
+                     f"dev-workers: big test processes running outside ~/bin/gate-slot: {d['gate_bypass']}",
+                     "14 Oct 03:2x: two API gates in parallel (~6.2 GB), one outside gate-slot, pushed dev-workers to 1.3 GB. "
+                     "Stop it and rerun through gate-slot (playbook 16).", grace=0))
+    if share >= 0.7 or avail < 3 or seats > T3_SEAT_CAP:
         out.append(F("t3-pressure", "senior",
                      f"dev-workers seat pressure: {seats} seats running (cap {T3_SEAT_CAP}), t3code {t3mem / 2**30:.1f} GiB "
                      f"= {share:.0%} of RAM, {avail:.1f} GiB available",
