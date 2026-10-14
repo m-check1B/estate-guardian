@@ -4,13 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "estate-classify"
-version = "0.2.0"
-description = "Pain → solution classifier core: rules, then TypeSafe Jev typed decisions with retained answers, driven by preset files"
+version = "0.3.0"
+description = "Pain → solution classifier core (rules, then TypeSafe Jev typed decisions with retained answers, preset files) and the worker router (lanes, lab switches, fallbacks, capabilities, free-text preferences)"
 requires-python = ">=3.11"
 license = {text = "MIT"}
 
 [tool.setuptools]
-py-modules = ["classify"]
+py-modules = ["classify", "worker_route"]
 
 [tool.setuptools.data-files]
 "share/estate-classify/presets" = ["presets/guardian.json", "presets/jack.json", "presets/example.json"]
+"share/estate-classify" = ["labs.example.json", "capabilities.example.json", "admin_policy.example.json"]

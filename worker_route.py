@@ -30,9 +30,20 @@ LANES = {  # candidates in preference order, across vendors; OUT/NEVER labs are 
     "marketing": {"candidates": ["opus"], "desc": "Marketing, pricing, brand, positioning or copy (Founder rule: Opus only)."},
 }
 ART = os.path.expanduser("~/Developer-artifacts/guardian")
+
+
+def _example(name):
+    """Shipped example config: next to this module in a checkout, or under <prefix>/share/estate-classify when the
+    estate-classify wheel is installed (0.3.0+)."""
+    for d in (HERE, os.path.join(sys.prefix, "share", "estate-classify")):
+        if os.path.exists(os.path.join(d, name)):
+            return os.path.join(d, name)
+    return os.path.join(HERE, name)
+
+
 # the live policy (the guard flips switches in it); a fresh checkout falls back to the shipped example
 LABS_FILE = os.environ.get("ESTATE_LABS") or next(
-    (p for p in (f"{ART}/labs.json",) if os.path.exists(p)), os.path.join(HERE, "labs.example.json"))
+    (p for p in (f"{ART}/labs.json",) if os.path.exists(p)), _example("labs.example.json"))
 ROUTING_LOG = os.environ.get("ESTATE_ROUTING_LOG", f"{ART}/worker-routing.jsonl")
 READINESS = os.environ.get("ESTATE_READINESS", f"{ART}/lab-readiness.json")
 USAGE = os.environ.get("ESTATE_USAGE", f"{ART}/lab-usage.json")
@@ -238,7 +249,7 @@ def today_counts():
 
 
 CAPS_FILE = os.environ.get("ESTATE_CAPABILITIES") or next(
-    (p for p in (f"{ART}/capabilities.json",) if os.path.exists(p)), os.path.join(HERE, "capabilities.example.json"))
+    (p for p in (f"{ART}/capabilities.json",) if os.path.exists(p)), _example("capabilities.example.json"))
 
 
 def capability(name, host=None):
