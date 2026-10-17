@@ -242,6 +242,7 @@
   "dead_ip": "203.0.113.10",
   "vault_url_re": "(nas[a-z0-9.-]*|192\\.168\\.0\\.21|100\\.82\\.130\\.7):9443",
   "codex_pulse_label": "com.example.codex-refusal-pulse",
+  "instances_file": "~/Developer-artifacts/estate/INSTANCES.json",
   "claude_projects_dir": "~/.claude/projects/-Users-me-github",
   "jev_keychain_items": [
     "com.example.typesafe.guardian",

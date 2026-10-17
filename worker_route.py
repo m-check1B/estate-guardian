@@ -5,10 +5,12 @@ Priors are taken from the "Claude 5.5 · which one?" cheat sheet (Daniel Wright)
   - Haiku 5.5: sorting, extracting, routing at scale; not long multi-step coding.
   - Sonnet 5.5: everyday work (bugs, docs, slides, spreadsheets), near Opus at half the price, but more output tokens.
   - Opus 5.5: complex, open-ended work that needs judgement (plus marketing/brand: Opus only, Founder rule).
-  - Luna 6 (Codex): computer/browser clicking, UI prove, recon (Founder 11 Oct), and vault/credential briefs on the Pro.
+  - Luna 6 (Codex): computer/browser clicking, UI prove, recon (Founder 11 Oct: best clicker); vault fallback.
+  - Sol 6.1 (Codex): back ON 15 Oct (Founder "odblokuj sol globálně"); strongest allowed executor for vault/credential
+    briefs (POLICY-VAULT-AND-2FA), second choice for clicker and judgement.
   - Multi-lab (Founder 11 Oct: \"we need multilab not anthropic only\"): every lane lists candidates across vendors
-    (Anthropic, OpenAI/Codex, Cursor, xAI/Grok); availability comes from labs.json (OUT/NEVER skipped; Astra, Fable,
-    Sol never chosen); everyday coding is spread across vendors by today's hire counts.
+    (Anthropic, OpenAI/Codex, Cursor, xAI/Grok); availability comes from labs.json (OUT/NEVER skipped; Astra and Fable
+    never chosen; Sol 6.1 back ON 15 Oct: first for vault, second for clicker/judgement); everyday coding is spread across vendors by today's hire counts.
 These are priors, not truths: every decision is logged to guardian/worker-routing.jsonl and the autoresearch loop
 keeps or changes the rules on our own outcomes (RESULT line 1 per hire).
 
@@ -22,11 +24,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 LANES = {  # candidates in preference order, across vendors; OUT/NEVER labs are skipped (labs.json)
-    "vault": {"candidates": ["luna"], "desc": "Credential, token, key, password, vault or keychain work done via ~/bin/nasvault on the Pro (vault briefs)."},
-    "clicker": {"candidates": ["luna", "cursor"], "desc": "Computer or browser use: UI prove, click-through E2E, screenshots, user tests, desktop-app checks, web recon or scouting."},
+    "vault": {"candidates": ["sol", "luna"], "desc": "Credential, token, key, password, vault or keychain work done via ~/bin/nasvault on the Pro (vault briefs)."},
+    "clicker": {"candidates": ["luna", "sol", "cursor"], "desc": "Computer or browser use: UI prove, click-through E2E, screenshots, user tests, desktop-app checks, web recon or scouting."},
     "sort": {"candidates": ["haiku", "cursor", "luna-medium"], "desc": "Sorting, classifying, triaging, extracting, labelling, deduplicating or inventorying many items; short mechanical transforms; no multi-step coding."},
     "everyday": {"candidates": ["sonnet", "luna-medium", "cursor", "grok"], "spread": True, "desc": "Everyday engineering: a well-specified bug fix, rebase, tests, lint, small refactor, docs, README, slides, spreadsheets, CI follow-up on an existing PR."},
-    "judgement": {"candidates": ["opus", "luna", "grok"], "desc": "Complex open-ended work needing judgement: architecture, design, specs, security review, audit, root cause, incident, migration, multi-repo change."},
+    "judgement": {"candidates": ["opus", "sol", "luna", "grok"], "desc": "Complex open-ended work needing judgement: architecture, design, specs, security review, audit, root cause, incident, migration, multi-repo change."},
     "marketing": {"candidates": ["opus"], "desc": "Marketing, pricing, brand, positioning or copy (Founder rule: Opus only)."},
 }
 ART = os.path.expanduser("~/Developer-artifacts/guardian")
@@ -124,7 +126,7 @@ def admin_policy():
     try:
         return json.load(open(ADMIN_POLICY))
     except Exception:  # default: the Founder rules that preferences may never break
-        return {"locked_lanes": {"vault": ["luna"], "marketing": ["opus"]}, "deny_vendors": [], "max_budget": "high"}
+        return {"locked_lanes": {"vault": ["sol", "luna"], "marketing": ["opus"]}, "deny_vendors": [], "max_budget": "high"}
 
 
 def route(path, title="", preferences=""):
@@ -174,7 +176,8 @@ def route(path, title="", preferences=""):
     chain, fell_from = [], None
     if not pick:
         primary = cands[0]
-        chain = [primary] + ([] if lane == "vault" else policy.get(primary, {}).get("fallback", []) + cands[1:])
+        # vault: only its own locked candidates (Sol, then Luna), never the generic fallbacks (15 Oct: Sol back ON)
+        chain = [primary] + (cands[1:] if lane == "vault" else policy.get(primary, {}).get("fallback", []) + cands[1:])
         for c in chain:
             if c in usable:
                 pick = c
@@ -185,7 +188,7 @@ def route(path, title="", preferences=""):
         return {"lab": None, "lane": lane, "how": how, "confidence": round(conf, 2), "blocked": True,
                 "reason": f"no usable lab for lane {lane} on {host}; chain {chain or cands}"}
     hire = policy[pick]["hire"]
-    budget = "high" if pick == "luna" else "medium"
+    budget = "high" if pick == "luna" or lane == "vault" else "medium"  # vault = sensitive work, strongest setting
     if lane in ("everyday", "judgement") and re.search(HIGH, (title + " " + text[:6000]).lower()) and hire != "cursor":
         budget = "high"
     if prefs["cost"] and not locked:

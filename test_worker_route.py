@@ -107,6 +107,11 @@ class Router(unittest.TestCase):
         d = self.route("Root cause the incident.", "BRIEF-inc.md")
         self.assertEqual(d["vendor"], "openai")  # opus -> sonnet (same instance, not ready) -> luna
 
+    def test_vault_prefers_sol_when_on(self):
+        self.labs["labs"]["sol"].update({"switch": "ON", "reason": "verified"})
+        d = self.route("Rotate the token via nasvault.", "VAULT-BRIEF-x.md")
+        self.assertEqual((d["lane"], d["model_lab"]), ("vault", "sol"), d)
+
     def test_vault_runs_on_the_pro(self):
         self.assertEqual(self.route("Rotate the token via nasvault.", "VAULT-BRIEF-x.md")["host"], "pro")
 

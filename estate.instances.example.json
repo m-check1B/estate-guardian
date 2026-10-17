@@ -1,0 +1,47 @@
+[
+  {
+    "name": "Agent Jack prod",
+    "url_health": "https://agentjack.kraliki.com/health/ready",
+    "owner": "senior",
+    "customer": null,
+    "kind": "prod",
+    "expect_version_from": "~/Developer-artifacts/estate/expected/agent-jack.json",
+    "version_field": "product_version"
+  },
+  {
+    "name": "Sphere prod",
+    "url_health": "https://agentjack.kraliki.com/sphere/health",
+    "owner": "senior",
+    "customer": null,
+    "kind": "prod",
+    "expect_version_from": null,
+    "version_field": "product_version"
+  },
+  {
+    "name": "Bezpecnost prace prod",
+    "url_health": "https://app.bozp.verduona.com/api/bozp/health",
+    "owner": "bezpecnost",
+    "customer": null,
+    "kind": "prod",
+    "expect_version_from": null,
+    "version_field": "product_version"
+  },
+  {
+    "name": "Agent Jack customer-a",
+    "url_health": "https://customer-a.example.com/health/ready",
+    "owner": "senior",
+    "customer": "Customer A",
+    "kind": "customer",
+    "expect_version_from": "~/Developer-artifacts/estate/expected/agent-jack.json",
+    "version_field": "product_version"
+  },
+  {
+    "name": "Agent Jack staging",
+    "url_health": "http://203.0.113.10:8080/health/ready",
+    "owner": "senior",
+    "customer": null,
+    "kind": "staging",
+    "expect_version_from": null,
+    "version_field": "release_source_sha"
+  }
+]

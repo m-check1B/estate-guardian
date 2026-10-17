@@ -9,6 +9,10 @@ Five guards, each aimed at a failure class that hurt us at night (playbook 10-le
             provider outages (one error signature across many seats, e.g. Grok 402).
   hosts     Jupiter RAM/load/disk/OOM kills/guest state + reboots, dev-workers RAM, NAS, prod, Pro, mini disks.
   prod      public health of every product, Sphere DB pool saturation, production SSH reachable.
+  sphere    Sphere API CPU >85% for 10 min, health p95 >2 s, Jack sphere_timeout rate.
+  pm2logs   Production ~/.pm2/logs/*.log not 0600 (invite tokens, 15 Oct); pm2-logrotate stalled (>2 d, >100 MB, not running).
+  instances every deployed instance in estate/INSTANCES.json (prod, customer, staging): down, slow (>3 s), version
+            drift against an expected-version file; writes estate/PROD-STATUS.md.
 
 A finding that persists past its grace period files ONE Linear issue "GUARDIAN: <key>" (or comments on
 the open one, at most hourly or when the evidence changes). When it clears for 2 runs in a row the issue
@@ -21,6 +25,7 @@ Usage: guardian.py [--dry-run] [--only ci,hosts,...]
 """
 import shlex, concurrent.futures as cf, datetime as dt, hashlib, json, os, re, socket, sqlite3, ssl, subprocess, sys, time
 import urllib.request
+import urllib.error
 import glob as _glob_mod
 import urllib.parse
 
@@ -492,7 +497,7 @@ def refresh_lab_readiness():
 
 USAGE_SNAPSHOT = f"{ART}/guardian/lab-usage.json"
 CODEXBAR = "/opt/homebrew/bin/codexbar"  # open-source CodexBar (steipete) CLI: plan usage per provider
-USAGE_PROVIDERS = {"claude": ["opus", "sonnet", "haiku"], "codex": ["luna", "luna-medium"], "cursor": ["cursor"], "grok": ["grok"]}
+USAGE_PROVIDERS = {"claude": ["opus", "sonnet", "haiku"], "codex": ["luna", "luna-medium", "sol"], "cursor": ["cursor"], "grok": ["grok"]}
 
 
 def refresh_lab_usage():
@@ -611,6 +616,20 @@ def guard_lines():
         except Exception:
             v = 0
         age = (NOW - v) / 60
+        try:  # guard_budget throttle: only while its reading is fresh (< 3 h) and before the reset
+            th = json.load(open(THROTTLE))
+            fresh, reset = NOW - th.get("reading_epoch", 0) < 3 * 3600, th.get("resets_epoch") or 0
+            if fresh or (reset and NOW < reset + 3 * 3600):
+                # a level change, and the plan reset itself, restart the clock: no P0 storm for lines that sat out
+                v = max(v, int(th.get("since_epoch") or 0), int(reset) if reset and NOW >= reset else 0)
+                age = (NOW - v) / 60
+            if fresh and NOW < reset:
+                if th.get("level") in ("throttle", "minimal", "stop"):
+                    limit = max(limit, 2 * th["cadence_min"] + 15)  # a gated run can just miss the cadence once
+                    if th.get("keep") and owner not in th["keep"]:
+                        continue
+        except Exception:
+            pass
         if age > limit:
             # A line without a durable watchdog task flaps: one heartbeat refresh closed an internal ticket, the next stall
             # filed an internal ticket. Hold its issue open 24 h after recovery until the watchdog task exists.
@@ -784,6 +803,259 @@ def guard_prod():
         out.append(F("prod-ssh", "senior", "Production SSH (Tailscale :22) refused",
                      "10 Oct: fail2ban locked out the Pro and Jupiter for 16 min (legacy pairer SSH every 20 s).", grace=10))
     return out
+
+
+# ---------------------------------------------------------------- guard: Sphere CPU / latency
+# 15 Oct ~18:00: prod sphere-api pinned at ~100% CPU, so Jack's 3 s pairing-readiness calls died with sphere_timeout
+# and every Local (paired Mac) turn failed before dispatch. Sphere licenses every product, so its saturation is P0.
+SPHERE_PROBE = r"""
+pid=$(ss -ltnp 2>/dev/null | awk '/:8000 /' | grep -o 'pid=[0-9]*' | head -1 | cut -d= -f2)
+echo pid=$pid
+if [ -n "$pid" ]; then
+  hz=$(getconf CLK_TCK); a=$(awk '{print $14+$15}' /proc/$pid/stat); sleep 15; b=$(awk '{print $14+$15}' /proc/$pid/stat)
+  echo cpu=$(( (b - a) * 100 / (hz * 15) ))
+fi
+__TIMEOUT_CMD__
+"""
+
+
+def guard_sphere():
+    out = []
+    tcmd = CFG["production"].get("sphere_timeout_cmd", "")  # prints timeouts=N for the last 10 min (Jack journal)
+    rc, txt, _ = ssh(PRODUCTION, SPHERE_PROBE.replace("__TIMEOUT_CMD__", tcmd), t=60)
+    d = kv(txt)
+    cpu = int(d["cpu"]) if d.get("cpu", "").isdigit() else None
+    if cpu is not None and cpu > 85:
+        out.append(F("sphere-cpu", "senior", f"Sphere API at {cpu}% CPU (pid {d.get('pid')})",
+                     "15 Oct: sphere-api pinned ~100% -> Jack pairing readiness sphere_timeout -> every Local turn failed. "
+                     "Profile the hot route (py-spy dump), look for retry storms or a blocked event loop; don't just restart.",
+                     grace=10, p0=True, nudge=True))
+    if d.get("timeouts", "").isdigit() and int(d["timeouts"]) >= 2:
+        out.append(F("sphere-timeouts", "senior", f"{d['timeouts']} Jack Talk turns failed with sphere_timeout in the last 10 min",
+                     "Jack readiness/admission calls to Sphere are timing out.", grace=5, p0=True, nudge=True))
+    url = next((u for n, u, _, _ in ENDPOINTS if n == "Sphere"), None)
+    if url:
+        lat = []
+        for _ in range(7):
+            t0 = time.time()
+            try:
+                with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": UA}), timeout=10) as r:
+                    r.read(200)
+                lat.append(time.time() - t0)
+            except Exception:
+                pass  # outright failures belong to prod-down-sphere, not latency (review PR#4)
+        slow = [x for x in lat if x > 2]
+        p95 = sorted(lat)[-2] if len(lat) >= 2 else 0  # 2nd-highest: one network hiccup on the Pro is not a P0
+        if len(slow) >= 2:
+            out.append(F("sphere-latency", "senior", f"Sphere health p95 {p95:.1f} s (> 2 s)",
+                         f"7 probes from the Pro: {', '.join(f'{x:.2f}' for x in lat)} s. Jack's readiness RPC times out at 3 s.",
+                         grace=10, p0=True, nudge=True))
+    return out
+
+
+# ---------------------------------------------------------------- guard: prod pm2 log hygiene (15 Oct)
+# 15 Oct: ~/.pm2/logs/sphere-api*.log were 0664 in a 0775 dir (world-readable) and held invite tokens;
+# pm2 recreates them 0664 on restart/rotation. Same night: pm2-logrotate not running, last rotation 3 Oct, out.log ~292 MB.
+PM2_LOG_PROBE = r"""
+d=$HOME/.pm2/logs
+echo dirmode=$(stat -c %a "$d" 2>/dev/null)
+echo badmode=$(find "$d" -maxdepth 1 -name '*.log' ! -perm 600 -printf '%f:%m ' 2>/dev/null)
+echo biggest=$(find "$d" -maxdepth 1 -name '*.log' -printf '%s %f\n' 2>/dev/null | sort -n | tail -1 | tr ' ' :)
+echo lastrot=$(find "$d" -maxdepth 1 -name '*__*.log*' -printf '%T@\n' 2>/dev/null | sort -n | tail -1 | cut -d. -f1)
+echo logrotate=$(pgrep -fc 'pm2-logrot[a]te/' 2>/dev/null)
+echo now=$(date +%s)
+"""
+
+
+def guard_pm2logs():
+    out = []
+    rc, txt, _ = ssh(PRODUCTION, PM2_LOG_PROBE, t=30)
+    if rc != 0:
+        return out
+    d = kv(txt)
+    bad = d.get("badmode", "").split()
+    if bad:
+        sens = [b for b in bad if b.startswith(("sphere-", "agentjack-", "token-gateway", "commerce-"))]
+        show = (sens or bad)[:6]
+        out.append(F("pm2-log-perms", "senior", f"Production pm2 logs not 0600: {len(bad)} files (e.g. {', '.join(show)})",
+                     f"Dir mode {d.get('dirmode')}. 15 Oct: sphere-api logs were 0664 and held invite tokens. "
+                     "chmod 600 now; root-cause = pm2 recreates logs with its umask (set umask 077 for the pm2 daemon).",
+                     grace=0, nudge=True))
+    now = int(d["now"]) if d.get("now", "").isdigit() else int(time.time())
+    big = d.get("biggest", "")
+    size = int(big.split(":", 1)[0]) if big.split(":", 1)[0].isdigit() else 0
+    last = int(d["lastrot"]) if d.get("lastrot", "").isdigit() else 0
+    age_d = (now - last) / 86400 if last else None
+    running = d.get("logrotate", "0").strip() not in ("", "0")
+    if not running or size > 100 * 2**20 or age_d is None or age_d > 2:
+        why = []
+        if not running:
+            why.append("pm2-logrotate process not running")
+        if size > 100 * 2**20:
+            why.append(f"largest log {big.split(':', 1)[-1]} = {size // 2**20} MB (> 100 MB)")
+        why.append("never rotated" if age_d is None else f"last rotation {age_d:.1f} d ago")
+        out.append(F("pm2-logrotate", "infra", "Production pm2 log rotation stalled: " + "; ".join(why),
+                     "15 Oct: last rotation 3 Oct, out.log ~292 MB. Fix: `pm2 install pm2-logrotate` (max_size 50M, retain 14, "
+                     "compress true) and confirm a rotated file appears; rotated files must also be 0600.",
+                     grace=60))
+    return out
+
+
+# ---------------------------------------------------------------- guard: deployed production instances (Founder, 17 Oct)
+# guard_prod only knows "is the product up". The Founder asked for monitoring of every DEPLOYED INSTANCE: our prod, each
+# customer install and staging, with latency and the version each one actually runs, so an instance left on an old
+# release (drift) is seen the same day. The registry lives outside the repo; schema in estate.instances.example.json.
+INSTANCES_FILE = os.path.expanduser(CFG.get("instances_file", "~/Developer-artifacts/estate/INSTANCES.json"))
+PROD_STATUS_MD = f"{ART}/estate/PROD-STATUS.md"
+INST_KINDS = ("prod", "customer", "staging")
+INST_SLOW_MS = 3000
+
+
+def _inst_fetch(url, timeout=20):
+    """GET url -> (status, body bytes (<= 64 KB), latency ms). HTTP errors return their status; anything else raises."""
+    t0 = time.monotonic()
+    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.status, r.read(65536), int((time.monotonic() - t0) * 1000)
+    except urllib.error.HTTPError as e:
+        return e.code, b"", int((time.monotonic() - t0) * 1000)
+
+
+def _inst_slug(name):
+    return re.sub(r"[^a-z0-9]+", "-", str(name).lower()).strip("-") or "unnamed"
+
+
+def _inst_version(body, field):
+    """Version the health JSON reports: version_field first, else release_source_sha; None for non-JSON."""
+    try:
+        d = json.loads(body.decode("utf-8", "replace"))
+    except Exception:
+        return None
+    if not isinstance(d, dict):
+        return None
+    for k in (field, "release_source_sha"):
+        if k and d.get(k) not in (None, ""):
+            return str(d[k])
+    return None
+
+
+def _inst_expected(path):
+    if not path:
+        return None
+    v = json.load(open(os.path.expanduser(path))).get("version")
+    return str(v) if v not in (None, "") else None
+
+
+def _inst_same(a, b):
+    a, b = a.strip().lower(), b.strip().lower()
+    if a == b:
+        return True
+    hexy = re.fullmatch(r"[0-9a-f]{7,40}", a) and re.fullmatch(r"[0-9a-f]{7,40}", b)
+    return bool(hexy) and (a.startswith(b) or b.startswith(a))  # short vs full git sha
+
+
+def _inst_check(inst):
+    row = {"name": inst["name"], "kind": inst.get("kind", "prod"), "customer": inst.get("customer") or "—",
+           "http": "—", "ms": None, "version": None, "expected": None, "at": stamp(time.time()), "err": None, "ok": False}
+    try:
+        status, body, ms = _inst_fetch(inst["url_health"], 20)
+        row.update(http=str(status), ms=ms, ok=200 <= status < 400)
+        if row["ok"]:
+            row["version"] = _inst_version(body, inst.get("version_field") or "product_version")
+    except Exception as e:
+        row.update(http="ERR", err=f"{type(e).__name__}: {str(e)[:120]}")
+    try:
+        row["expected"] = _inst_expected(inst.get("expect_version_from"))
+    except Exception as e:
+        row["expected_err"] = f"{type(e).__name__}: {str(e)[:120]}"
+    return row
+
+
+def _inst_load():
+    """-> (valid instances, registry problems). Never raises: a bad registry is a finding, not a crash."""
+    try:
+        raw = json.load(open(INSTANCES_FILE))
+    except FileNotFoundError:
+        return [], [f"registry {INSTANCES_FILE} does not exist"]
+    except Exception as e:
+        return [], [f"registry {INSTANCES_FILE} unreadable: {type(e).__name__}: {str(e)[:120]}"]
+    if isinstance(raw, dict):
+        raw = raw.get("instances")
+    if not isinstance(raw, list):
+        return [], [f"registry {INSTANCES_FILE} must be a JSON list of instances"]
+    good, bad, seen = [], [], set()
+    for i, x in enumerate(raw):
+        if not isinstance(x, dict) or not x.get("name") or not str(x.get("url_health", "")).startswith(("http://", "https://")):
+            bad.append(f"entry {i}: needs name and an http(s) url_health")
+        elif x.get("kind", "prod") not in INST_KINDS:
+            bad.append(f"entry {i} ({x['name']}): kind must be one of {', '.join(INST_KINDS)}")
+        elif _inst_slug(x["name"]) in seen:
+            bad.append(f"entry {i} ({x['name']}): duplicate name")
+        else:
+            seen.add(_inst_slug(x["name"]))
+            good.append(x)
+    return good, bad
+
+
+def guard_instances():
+    out = []
+    insts, problems = _inst_load()
+    rows = []
+    if insts:
+        with cf.ThreadPoolExecutor(min(8, len(insts))) as ex:
+            rows = list(ex.map(_inst_check, insts))
+    for inst, row in zip(insts, rows):
+        key, owner, kind = _inst_slug(inst["name"]), inst.get("owner") or "senior", row["kind"]
+        where = f"{inst['name']} ({kind}{', ' + row['customer'] if row['customer'] != '—' else ''})"
+        if not row["ok"]:
+            out.append(F(f"inst-down-{key}", owner, f"Instance {where} health failing",
+                         f"{inst['url_health']} -> {row['err'] or 'HTTP ' + row['http']}", grace=9,
+                         p0=kind in ("prod", "customer"), amber=kind == "staging"))
+            continue
+        if row["ms"] is not None and row["ms"] > INST_SLOW_MS:
+            out.append(F(f"inst-slow-{key}", owner, f"Instance {where} slow: {row['ms']} ms (limit {INST_SLOW_MS})",
+                         f"{inst['url_health']} answered HTTP {row['http']} in {row['ms']} ms.", grace=9, amber=True))
+        if row.get("expected_err"):
+            problems.append(f"{inst['name']}: expect_version_from {inst.get('expect_version_from')} unreadable: {row['expected_err']}")
+        elif row["version"] and row["expected"] and not _inst_same(row["version"], row["expected"]):
+            out.append(F(f"inst-drift-{key}", owner, f"Instance {where} runs {row['version']}, expected {row['expected']}",
+                         f"{inst['url_health']} reports {inst.get('version_field') or 'product_version'}/release_source_sha "
+                         f"= {row['version']}; {inst.get('expect_version_from')} says {row['expected']}. Deploy the expected "
+                         "release (or update the expected-version file if this instance is pinned on purpose).",
+                         grace=60, amber=True))
+    if problems:
+        out.append(F("inst-registry", "guardian", f"Instance registry problem ({len(problems)})",
+                     "\n".join(f"- {p}" for p in problems[:20]) + "\nSchema: estate.instances.example.json (estate-guardian repo).",
+                     grace=30, amber=True))
+    if "--dry-run" not in sys.argv:
+        try:
+            write_prod_status(rows, problems)
+        except Exception as e:
+            out.append(F("inst-status-write", "guardian", "PROD-STATUS.md could not be written",
+                         f"{type(e).__name__}: {e}"[:200], grace=30, amber=True))
+    return out
+
+
+def write_prod_status(rows, problems=()):
+    def cell(v):
+        return "—" if v in (None, "") else str(v).replace("|", "/")
+    down = [r for r in rows if not r["ok"]]
+    head = "RED" if any(r["kind"] != "staging" for r in down) else ("AMBER" if down or problems else "GREEN")
+    lines = [f"# Production instances (GUARDIAN, {stamp()})", "",
+             f"{head}: {len(rows) - len(down)}/{len(rows)} instances up. Registry: {INSTANCES_FILE}. "
+             f"Slow = over {INST_SLOW_MS} ms; version = the health JSON's version_field, else release_source_sha.", "",
+             "| name | kind | customer | HTTP | ms | version | expected | checked at |", "|---|---|---|---|---|---|---|---|"]
+    order = {k: i for i, k in enumerate(INST_KINDS)}
+    for r in sorted(rows, key=lambda r: (order.get(r["kind"], 9), r["name"].lower())):
+        lines.append(f"| {cell(r['name'])} | {cell(r['kind'])} | {cell(r['customer'])} | {cell(r['http'])} | {cell(r['ms'])} "
+                     f"| {cell(r['version'])} | {cell(r['expected'])} | {cell(r['at'])} |")
+    if problems:
+        lines += ["", "Registry problems:"] + [f"- {p}" for p in problems]
+    os.makedirs(os.path.dirname(PROD_STATUS_MD), exist_ok=True)
+    tmp = PROD_STATUS_MD + ".new"
+    open(tmp, "w").write("\n".join(lines) + "\n")
+    os.replace(tmp, PROD_STATUS_MD)
 
 
 # ---------------------------------------------------------------- guard 6: prevention matrix (predict)
@@ -1709,9 +1981,10 @@ def guard_usage():
                     f"| {x.get('resetsAt') or '?'} | {state} | {', '.join(on) or '—'} |")
         if prov == "claude" and state != "OK":
             out.append(F("usage-claude", "guardian",
-                         f"Claude plan {x['usedPercent']}% used, {'OFF' if state == 'OFF' else 'will not last'} to reset {x.get('resetsAt')}",
-                         "Every Claude Desktop thread and Claude seat stops when the plan runs out (13 Oct: 10.5 h gap). "
-                         "Lines move urgent work to Luna seats now; see estate/MODEL-AVAILABILITY.md.",
+                         f"Claude SEAT plan {x['usedPercent']}% used, {'OFF' if state == 'OFF' else 'will not last'} to reset {x.get('resetsAt')}",
+                         "CodexBar reads the SEAT account (T3 claudeAgent + CLI on the Pro and dev-workers); since 16 Oct the Claude "
+                         "Desktop line threads run on a second account (guard_budget). Move urgent seat work to Codex Luna/Sol; "
+                         "see estate/MODEL-AVAILABILITY.md.",
                          grace=0, p0=state == "OFF"))
     if "--dry-run" not in sys.argv:
         tmp = AVAILABILITY_MD + ".new"
@@ -1720,6 +1993,136 @@ def guard_usage():
             "OFF = the router no longer hires it. Claude WARN/OFF also means Claude Desktop threads may stop.\n\n"
             "| plan | used | lasts to reset | resets (UTC) | state | labs ON |\n|---|---|---|---|---|---|\n" + "\n".join(rows) + "\n")
         os.replace(tmp, AVAILABILITY_MD)
+    return out
+
+
+# ---------------------------------------------------------------- guard: Claude budget throttle (desktop account)
+# 16 Oct ~08:20-09:00: the whole estate went silent when the Claude weekly cap hit 100%. guard_usage only switched the
+# hire router OFF (15 Oct 23:03, 91%); the Claude Desktop line threads kept pulsing, and every pulse/peer turn re-read a
+# 530-720k-token context: 85-90% of their burn was cache reads (guardian/usage/burn_by_line.py). Since 16 Oct there are
+# two accounts: CodexBar = the SEAT account (T3 claudeAgent + CLI on the Pro and dev-workers); the DESKTOP account that
+# runs the line threads is reported by the GUARDIAN pulse from the app (get_usage) into guardian/usage/desktop-plan.json.
+# This guard turns it into ONE throttle file every durable pulse obeys (pulse_throttle.py), and flags line threads whose
+# context has grown so large that each turn burns ~0.5 M cached tokens.
+DESKTOP_PLAN = f"{STATE_DIR}/usage/desktop-plan.json"
+THROTTLE = f"{ART}/estate/PULSE-THROTTLE.json"
+LINES_JSON = f"{ART}/estate/lines.json"
+# weekly % -> level, pulse cadence (min). minimal keeps only MINIMAL_KEEP lines; stop leaves only GUARDIAN (to keep reading).
+THROTTLE_LEVELS = [(95, "stop", 120), (88, "minimal", 120), (80, "throttle", 60), (70, "warn", 30), (0, "normal", 30)]
+MINIMAL_KEEP = ["guardian", "syfon"]
+CTX_WARN, CTX_HIGH = 400_000, 650_000
+
+
+def _throttle_level(weekly, five_h, resets_at):
+    lvl = next(i for i, (pct, *_r) in enumerate(THROTTLE_LEVELS) if weekly >= pct)
+    try:  # pace: projected end-of-week use from the elapsed share of the 7-day window
+        left = (dt.datetime.fromisoformat(resets_at.replace("Z", "+00:00")).timestamp() - NOW) / 604800
+        projected = weekly / max(1 - left, 0.05)
+    except Exception:
+        projected = weekly
+    # Founder 16 Oct: the old account went in ~1 week with this setup, so pace brakes early on the new one.
+    if projected >= 115 and weekly >= 35:
+        lvl = min(lvl, 2)  # throttle
+    elif projected >= 100 and weekly >= 25:
+        lvl = min(lvl, 3)  # warn
+    if five_h >= 90:
+        lvl = min(lvl, 2)
+    return lvl, round(projected)
+
+
+def _session_context(local_id):
+    """Last API call's context size (tokens) of a Claude Desktop thread, from its local transcript."""
+    for f in _glob_mod.glob(f"{HOME}/Library/Application Support/Claude/claude-code-sessions/*/*/{local_id}.json"):
+        try:
+            cli = json.load(open(f)).get("cliSessionId")
+        except Exception:
+            continue
+        for t in _glob_mod.glob(f"{HOME}/.claude/projects/*/{cli}.jsonl"):
+            with open(t, "rb") as fh:
+                fh.seek(max(0, os.path.getsize(t) - 3_000_000))
+                tail = fh.read().decode("utf-8", "ignore").splitlines()
+            for ln in reversed(tail):
+                if '"usage"' not in ln:
+                    continue
+                try:
+                    u = json.loads(ln)["message"]["usage"]
+                except Exception:
+                    continue
+                return sum(u.get(k, 0) for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
+    return None
+
+
+def guard_budget():
+    out = []
+    try:
+        plan = json.load(open(DESKTOP_PLAN))
+        wins = {w["label"]: w for w in plan["windows"]}
+        weekly = next(w for k, w in wins.items() if k.lower().startswith("weekly") and "all" in k.lower())
+        five = next((w for k, w in wins.items() if k.lower().startswith("5-hour")), {"percentUsed": 0})
+        age = (NOW - plan["at"]) / 60
+    except Exception as e:
+        out.append(F("budget-unknown", "guardian", "Claude desktop plan usage unknown",
+                     f"{DESKTOP_PLAN} unreadable ({type(e).__name__}). The GUARDIAN pulse writes it from get_usage each run.",
+                     grace=90, amber=True))
+        return out
+    try:
+        prev = json.load(open(THROTTLE))
+    except Exception:
+        prev = {}
+    if age > 90:
+        out.append(F("budget-stale", "guardian", f"Claude desktop plan reading is {int(age)} min old",
+                     "The GUARDIAN pulse refreshes guardian/usage/desktop-plan.json from get_usage every run; pulses keep the "
+                     "last throttle level meanwhile (pulse_throttle.py fails open after 3 h).", grace=30, amber=True))
+    lvl, projected = _throttle_level(weekly["percentUsed"], five["percentUsed"], weekly.get("resetsAt", ""))
+    names = [n for _p, n, _c in THROTTLE_LEVELS]
+    if prev.get("level") in names and names.index(prev["level"]) < lvl:  # easing off: 3-point hysteresis, no flapping
+        ppct = THROTTLE_LEVELS[names.index(prev["level"])][0]
+        if weekly["percentUsed"] >= ppct - 3 and five["percentUsed"] < 87 and prev.get("resets_at") == weekly.get("resetsAt"):
+            lvl = names.index(prev["level"])
+    pct, level, cadence = THROTTLE_LEVELS[lvl]
+    try:
+        resets_epoch = dt.datetime.fromisoformat(weekly["resetsAt"].replace("Z", "+00:00")).timestamp()
+    except Exception:
+        resets_epoch = None
+    doc = {"level": level, "cadence_min": cadence, "keep": MINIMAL_KEEP if level in ("minimal", "stop") else None,
+           "weekly_pct": weekly["percentUsed"], "five_hour_pct": five["percentUsed"], "projected_week_pct": projected,
+           "resets_at": weekly.get("resetsAt"), "resets_epoch": resets_epoch, "reading_at": stamp(plan["at"]),
+           "reading_epoch": plan["at"], "at": stamp(),
+           "since": prev.get("since") if prev.get("level") == level else stamp(),
+           "since_epoch": prev.get("since_epoch", NOW) if prev.get("level") == level else NOW,
+           "rules": "normal/warn: every pulse runs; throttle: run when the line heartbeat is >= cadence-5 min old; "
+                    "minimal: only `keep` lines, at cadence; stop: only guardian at cadence (no-AI guard keeps watching)."}
+    if "--dry-run" in sys.argv:
+        STATE["budget_preview"] = doc
+    else:
+        os.makedirs(os.path.dirname(THROTTLE), exist_ok=True)
+        json.dump(doc, open(THROTTLE + ".new", "w"), indent=1)
+        os.replace(THROTTLE + ".new", THROTTLE)
+        if prev.get("level") != level:
+            with open(LAB_CHANGES, "a") as fh:  # GUARDIAN pulse broadcasts it to the active lines (§3c)
+                fh.write(json.dumps({"at": stamp(), "labs": ["claude-desktop"], "throttle": level,
+                                     "reason": f"desktop plan weekly {weekly['percentUsed']}% (projected {projected}%), pulses every {cadence} min"}) + "\n")
+    if level != "normal":
+        out.append(F("budget-claude-desktop", "guardian",
+                     f"Claude desktop plan {weekly['percentUsed']}% weekly (projected {projected}%): pulses {level.upper()}",
+                     f"Throttle {level}, cadence {cadence} min, resets {weekly.get('resetsAt')}. Line threads: keep turns short, "
+                     "no chatty peer messages, compact or hand off threads above 400k context; move long work to Codex seats.",
+                     grace=0, p0=level in ("minimal", "stop"), amber=level == "warn"))
+    try:
+        lines = [l for l in json.load(open(LINES_JSON))["lines"] if l.get("claude_session")]
+    except Exception:
+        lines = []
+    for l in lines:
+        ctx = _session_context(l["claude_session"])
+        off = bool(l.get("paused")) or l["id"] in (CFG.get("paused_lines") or {})
+        if ctx and ctx >= CTX_WARN:
+            out.append(F(f"ctx-{l['id']}", l["id"] if l["id"] in OWNER_LABELS else "guardian",
+                         f"{l['title']} context {ctx // 1000}k tokens (limit {CTX_WARN // 1000}k)",
+                         "Every turn of this thread (pulse, peer message, task notification) re-reads the whole context; "
+                         "on 14-16 Oct that was 85-90% of the Claude burn. Picture of done: the line compacts (/compact) or "
+                         "hands off to a fresh thread with a short brief, and lines.json gets the new session id.",
+                         grace=60 if ctx < CTX_HIGH else 15, amber=ctx < CTX_HIGH or off,
+                         file=ctx >= CTX_HIGH and not off))  # an off line costs nothing until it is woken: status only
     return out
 
 
@@ -1761,6 +2164,12 @@ for p in filter(str.isdigit, os.listdir("/proc")):
     ppid, age = st[1], up - int(st[19]) / tick
     if ppid not in user_systemd or age < 5400 or "/_worktrees/" not in cwd:
         continue
+    try:  # a vite/preview someone runs on purpose as its own systemd --user unit is not an orphan (review PR#4)
+        cg = open(f"/proc/{p}/cgroup").read()
+        if ".service" in cg and "t3code.service" not in cg and "/app.slice/" in cg:
+            continue
+    except Exception:
+        pass
     wt = cwd.split("/web")[0]
     if any(k in cwd for k in keep) or any(l and (cwd.startswith(l) or l.startswith(wt)) for l in live):
         continue
@@ -1781,7 +2190,10 @@ for p in filter(str.isdigit, os.listdir("/proc")):
         try:
             os.killpg(int(p), 15) if os.getpgid(int(p)) == int(p) else os.kill(int(p), 15)
         except Exception:
-            os.kill(int(p), 15)
+            try:
+                os.kill(int(p), 15)
+            except ProcessLookupError:
+                continue  # exited on its own between checks and kill; keep reaping the rest
     out.append({"pid": int(p), "age_min": int(age / 60), "rss_mb": rss, "cwd": cwd, "cmd": cmd[:80]})
 print(json.dumps(out))
 EOF
@@ -1818,7 +2230,7 @@ def guard_reaper():
 
 
 GUARDS = {"ci": guard_ci, "handoffs": guard_handoffs, "lines": guard_lines, "hosts": guard_hosts, "prod": guard_prod,
-          "predict": guard_predict, "vault": guard_vault_web, "refusals": guard_refusals, "mirrors": guard_mirrors, "observability": guard_observability, "scheduler": guard_scheduler, "results": guard_results, "antigravity": guard_antigravity, "layout": guard_layout, "t3host": guard_t3host, "usage": guard_usage, "reaper": guard_reaper}
+          "predict": guard_predict, "vault": guard_vault_web, "refusals": guard_refusals, "mirrors": guard_mirrors, "observability": guard_observability, "scheduler": guard_scheduler, "results": guard_results, "antigravity": guard_antigravity, "layout": guard_layout, "t3host": guard_t3host, "usage": guard_usage, "budget": guard_budget, "reaper": guard_reaper, "sphere": guard_sphere, "pm2logs": guard_pm2logs, "instances": guard_instances}
 
 
 # ---------------------------------------------------------------- Linear + state
